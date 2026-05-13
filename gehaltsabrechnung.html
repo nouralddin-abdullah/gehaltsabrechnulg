@@ -937,100 +937,1943 @@
     // ===== End of inlined sv.mjs =====
 
     // ===== Inlined from tests/lohnsteuer.mjs — keep in sync =====
-    const TAX_CONSTANTS_2024 = {
-      grundfreibetrag: 11604, werbungskostenpauschbetrag: 1230, sonderausgabenpauschbetrag: 36,
-      entlastungsbetrag_alleinerziehende: 4260,
-      tarif_eckwerte: [11604, 17005, 66760, 277825],
-      tarif_progressiv_1_a: 922.98, tarif_progressiv_1_b: 1400,
-      tarif_progressiv_2_a: 181.19, tarif_progressiv_2_b: 2397, tarif_progressiv_2_c: 1025.38,
-      tarif_linear_1_rate: 0.42, tarif_linear_1_subtract: 10602.13,
-      tarif_linear_2_rate: 0.45, tarif_linear_2_subtract: 18936.88,
-      soli_rate: 0.055, soli_freigrenze_normal: 18130, soli_freigrenze_stkl3: 36260,
-      soli_milderungs_rate: 0.119,
-      vorsorge_rv_an_rate: 0.093, vorsorge_kv_avg_rate: 0.0815, vorsorge_pv_rate: 0.017,
-      bbg_kv_pv_year: 62100, bbg_rv_av_west_year: 90600, bbg_rv_av_ost_year: 89400,
+    // ===== Inlined from tests/pap.mjs + reference/Lohnsteuer2026.xml =====
+    // Generic interpreter for the BMF Lohnsteuer-Programmablaufplan (PAP) XML.
+    //
+    // The BMF publishes a yearly PAP as XML. This module parses that XML and
+    // executes it against a set of INPUT values (Brutto, Steuerklasse, etc.) to
+    // produce the official outputs (LSTLZZ = Lohnsteuer in cents, SOLZLZZ = Soli,
+    // BK = Bemessungsgrundlage Kirchensteuer, …).
+    //
+    // Why interpret instead of hand-translate: the PAP changes every January, and
+    // hand-translating the ~50 methods is error-prone. Interpreting the XML means
+    // the engine auto-updates when we drop in the new year's file.
+    //
+    // Numeric model: we use Number, not BigDecimal. The PAP uses BigDecimal so its
+    // rounding boundaries are deterministic. We mimic this by faithfully applying
+    // setScale() and divide(scale, mode) at every rounding boundary the PAP
+    // specifies. Sub-cent errors can creep in, but the published Lohnsteuer values
+    // are integer EUR for the year (LSTLZZ is in cents), so rounding at boundaries
+    // keeps us within ±1 cent of BMF.
+    //
+    // Reference XML format: https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml
+
+    const ROUND_DOWN = 'DOWN', ROUND_UP = 'UP', ROUND_HALF_UP = 'HALF_UP', ROUND_UNNECESSARY = 'UN';
+
+    function _scale(n, scale, mode) {
+      const factor = Math.pow(10, scale);
+      const scaled = n * factor;
+      let result;
+      if (mode === ROUND_DOWN) result = scaled >= 0 ? Math.floor(scaled) : Math.ceil(scaled);
+      else if (mode === ROUND_UP) result = scaled >= 0 ? Math.ceil(scaled) : Math.floor(scaled);
+      else if (mode === ROUND_HALF_UP) result = Math.sign(scaled) * Math.floor(Math.abs(scaled) + 0.5);
+      else result = scaled; // ROUND_UNNECESSARY etc.
+      return result / factor;
+    }
+
+    const _api = {
+      _add: (a, b) => a + b,
+      _sub: (a, b) => a - b,
+      _mul: (a, b) => a * b,
+      _div: (a, b, scale, mode) => (scale != null && mode != null) ? _scale(a / b, scale, mode) : a / b,
+      _round: (a, scale, mode) => _scale(a, scale, mode),
+      _max: (a, b) => Math.max(a, b),
+      _min: (a, b) => Math.min(a, b),
+      _cmp: (a, b) => a > b ? 1 : a < b ? -1 : 0,
+      _trunc: a => Math.trunc(a),
+      ROUND_DOWN, ROUND_UP, ROUND_HALF_UP, ROUND_UNNECESSARY,
     };
-    function einkommensteuer(zvE) {
-      const T = TAX_CONSTANTS_2024;
-      if (zvE <= T.tarif_eckwerte[0]) return 0;
-      if (zvE <= T.tarif_eckwerte[1]) {
-        const y = (zvE - T.tarif_eckwerte[0]) / 10000;
-        return Math.floor((T.tarif_progressiv_1_a * y + T.tarif_progressiv_1_b) * y);
+
+    // Convert a Java-BigDecimal expression to a JS expression using a
+    // recursive-descent parser.
+    //
+    // Grammar (informal):
+    //   expr     := orExpr
+    //   orExpr   := andExpr ( '||' andExpr )*
+    //   andExpr  := cmpExpr ( '&&' cmpExpr )*
+    //   cmpExpr  := addExpr ( ('=='|'!='|'<='|'>='|'<'|'>') addExpr )?
+    //   addExpr  := mulExpr ( ('+'|'-') mulExpr )*
+    //   mulExpr  := unary  ( ('*'|'/') unary )*
+    //   unary    := ('-' | '!')? postfix
+    //   postfix  := primary ( '.' IDENT '(' args? ')' | '[' expr ']' )*
+    //   primary  := NUMBER | IDENT | '(' expr ')' | IDENT '(' args? ')'
+    //   args     := expr (',' expr)*
+    const METHODS = {
+      add: (r, a) => `(${r} + ${a[0]})`,
+      subtract: (r, a) => `(${r} - ${a[0]})`,
+      multiply: (r, a) => `(${r} * ${a[0]})`,
+      divide: (r, a) => a.length === 1 ? `(${r} / ${a[0]})` : `_div(${r}, ${a.join(', ')})`,
+      max: (r, a) => `_max(${r}, ${a[0]})`,
+      min: (r, a) => `_min(${r}, ${a[0]})`,
+      compareTo: (r, a) => `_cmp(${r}, ${a[0]})`,
+      longValue: (r) => `_trunc(${r})`,
+      setScale: (r, a) => `_round(${r}, ${a.join(', ')})`,
+    };
+
+    function convertExpr(src) {
+      const p = new Parser(src);
+      return p.parseExpr();
+    }
+
+    class Parser {
+      constructor(src) {
+        this.src = src;
+        this.i = 0;
       }
-      if (zvE <= T.tarif_eckwerte[2]) {
-        const z = (zvE - T.tarif_eckwerte[1]) / 10000;
-        return Math.floor((T.tarif_progressiv_2_a * z + T.tarif_progressiv_2_b) * z + T.tarif_progressiv_2_c);
+      ws() {
+        while (this.i < this.src.length && /\s/.test(this.src[this.i])) this.i++;
       }
-      if (zvE <= T.tarif_eckwerte[3]) return Math.floor(T.tarif_linear_1_rate * zvE - T.tarif_linear_1_subtract);
-      return Math.floor(T.tarif_linear_2_rate * zvE - T.tarif_linear_2_subtract);
-    }
-    function _vorsorgepauschale(annualBrutto) {
-      const T = TAX_CONSTANTS_2024;
-      const rvBase = Math.min(annualBrutto, T.bbg_rv_av_west_year);
-      const kvBase = Math.min(annualBrutto, T.bbg_kv_pv_year);
-      return rvBase * T.vorsorge_rv_an_rate + kvBase * T.vorsorge_kv_avg_rate + kvBase * T.vorsorge_pv_rate;
-    }
-    function _zvE({ annualBrutto, steuerklasse, jahresfreibetrag = 0 }) {
-      const T = TAX_CONSTANTS_2024;
-      let zvE = annualBrutto;
-      zvE -= T.werbungskostenpauschbetrag;
-      zvE -= T.sonderausgabenpauschbetrag;
-      zvE -= _vorsorgepauschale(annualBrutto);
-      if (steuerklasse === 2) zvE -= T.entlastungsbetrag_alleinerziehende;
-      zvE -= jahresfreibetrag;
-      return Math.max(0, Math.floor(zvE));
-    }
-    function jahresLohnsteuer({ annualBrutto, steuerklasse, faktor, jahresfreibetrag = 0 }) {
-      const T = TAX_CONSTANTS_2024;
-      const sk = +steuerklasse || 1;
-      if (sk === 3) {
-        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
-        return 2 * einkommensteuer(Math.floor(zvE / 2));
+      peek(s) {
+        this.ws();
+        return this.src.startsWith(s, this.i);
       }
-      if (sk === 5) {
-        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
-        const a = einkommensteuer(Math.floor(zvE * 1.25));
-        const b = einkommensteuer(Math.floor(zvE * 0.75));
-        return Math.max(0, a - b);
+      consume(s) {
+        if (!this.peek(s)) throw new Error(`Expected '${s}' at ${this.i} in: ${this.src}`);
+        this.i += s.length;
       }
-      if (sk === 6) {
-        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
-        return einkommensteuer(zvE + T.grundfreibetrag);
+      tryConsume(s) {
+        if (this.peek(s)) { this.i += s.length; return true; }
+        return false;
       }
-      const zvE = _zvE({ annualBrutto, steuerklasse: sk, jahresfreibetrag });
-      let tax = einkommensteuer(zvE);
-      if (sk === 4 && faktor && faktor > 0 && faktor < 1) tax = Math.floor(tax * faktor);
-      return tax;
+      // Tokens
+      matchIdent() {
+        this.ws();
+        const m = /^[A-Za-z_]\w*/.exec(this.src.slice(this.i));
+        if (!m) return null;
+        this.i += m[0].length;
+        return m[0];
+      }
+      matchNumber() {
+        this.ws();
+        const m = /^-?\d+(\.\d+)?/.exec(this.src.slice(this.i));
+        if (!m) return null;
+        this.i += m[0].length;
+        return m[0];
+      }
+      // Top-level entry
+      parseExpr() {
+        const r = this.parseOr();
+        this.ws();
+        if (this.i < this.src.length) {
+          // Allow trailing junk: caller may pass an assignment 'X = expr'; if we
+          // see an '=' at top, treat it as assignment.
+          // Otherwise it's a parse error.
+          throw new Error('Trailing content at ' + this.i + ': ' + this.src.slice(this.i));
+        }
+        return r;
+      }
+      parseOr() {
+        let l = this.parseAnd();
+        while (this.tryConsume('||')) {
+          const r = this.parseAnd();
+          l = `(${l} || ${r})`;
+        }
+        return l;
+      }
+      parseAnd() {
+        let l = this.parseCmp();
+        while (this.tryConsume('&&')) {
+          const r = this.parseCmp();
+          l = `(${l} && ${r})`;
+        }
+        return l;
+      }
+      parseCmp() {
+        let l = this.parseAdd();
+        for (const op of ['==', '!=', '<=', '>=', '<', '>']) {
+          if (this.tryConsume(op)) {
+            const r = this.parseAdd();
+            return `(${l} ${op} ${r})`;
+          }
+        }
+        return l;
+      }
+      parseAdd() {
+        let l = this.parseMul();
+        while (true) {
+          this.ws();
+          if (this.tryConsume('+')) {
+            const r = this.parseMul();
+            l = `(${l} + ${r})`;
+          } else if (this.peek('-') && !this.peek('->')) {
+            this.i++; // consume single '-'
+            const r = this.parseMul();
+            l = `(${l} - ${r})`;
+          } else break;
+        }
+        return l;
+      }
+      parseMul() {
+        let l = this.parseUnary();
+        while (this.tryConsume('*') || this.tryConsume('/')) {
+          // We don't know which op we ate; backtrack 1 char to read it.
+          const op = this.src[this.i - 1];
+          const r = this.parseUnary();
+          l = `(${l} ${op} ${r})`;
+        }
+        return l;
+      }
+      parseUnary() {
+        this.ws();
+        if (this.tryConsume('!')) return `!(${this.parsePostfix()})`;
+        if (this.peek('-') && !/\d/.test(this.src[this.i + 1] || '')) {
+          // unary minus only if not part of a number literal
+          this.i++;
+          return `(-${this.parsePostfix()})`;
+        }
+        return this.parsePostfix();
+      }
+      parsePostfix() {
+        let r = this.parsePrimary();
+        while (true) {
+          this.ws();
+          if (this.peek('.')) {
+            const save = this.i;
+            this.i++;
+            const name = this.matchIdent();
+            if (!name) { this.i = save; break; }
+            this.ws();
+            if (!this.peek('(')) {
+              // Not a method call — could be a property access (BigDecimal.ROUND_DOWN handled below).
+              // For now, treat 'a.b' as 'a.b' literally if not followed by '('.
+              r = `${r}.${name}`;
+              continue;
+            }
+            this.consume('(');
+            const args = [];
+            this.ws();
+            if (!this.peek(')')) {
+              args.push(this.parseOr());
+              while (this.tryConsume(',')) args.push(this.parseOr());
+            }
+            this.consume(')');
+            if (METHODS[name]) {
+              r = METHODS[name](r, args);
+            } else {
+              // Unknown chain method — preserve literally (shouldn't happen for valid PAP).
+              r = `${r}.${name}(${args.join(', ')})`;
+            }
+          } else if (this.peek('[')) {
+            this.consume('[');
+            const idx = this.parseOr();
+            this.consume(']');
+            r = `${r}[${idx}]`;
+          } else break;
+        }
+        return r;
+      }
+      parsePrimary() {
+        this.ws();
+        if (this.peek('(')) {
+          this.consume('(');
+          const e = this.parseOr();
+          this.consume(')');
+          return `(${e})`;
+        }
+        const num = this.matchNumber();
+        if (num != null) return num;
+        const id = this.matchIdent();
+        if (!id) throw new Error('Expected primary at ' + this.i + ' in: ' + this.src);
+        // BigDecimal special forms
+        if (id === 'BigDecimal') {
+          this.consume('.');
+          const member = this.matchIdent();
+          if (member === 'ZERO') return '0';
+          if (member === 'ONE') return '1';
+          if (member === 'ROUND_DOWN') return "ROUND_DOWN";
+          if (member === 'ROUND_UP') return "ROUND_UP";
+          if (member === 'ROUND_HALF_UP') return "ROUND_HALF_UP";
+          if (member === 'ROUND_UNNECESSARY') return "ROUND_UNNECESSARY";
+          if (member === 'valueOf') {
+            this.consume('(');
+            const v = this.parseOr();
+            this.consume(')');
+            return `(${v})`;
+          }
+          throw new Error('Unknown BigDecimal member: ' + member);
+        }
+        // Function call: IDENT '(' args ')'
+        this.ws();
+        if (this.peek('(')) {
+          this.consume('(');
+          const args = [];
+          this.ws();
+          if (!this.peek(')')) {
+            args.push(this.parseOr());
+            while (this.tryConsume(',')) args.push(this.parseOr());
+          }
+          this.consume(')');
+          return `${id}(${args.join(', ')})`;
+        }
+        return id;
+      }
     }
-    function jahresSoli({ jahresLst, steuerklasse }) {
-      const T = TAX_CONSTANTS_2024;
-      const sk = +steuerklasse || 1;
-      const freigrenze = sk === 3 ? T.soli_freigrenze_stkl3 : T.soli_freigrenze_normal;
-      if (jahresLst <= freigrenze) return 0;
-      const full = jahresLst * T.soli_rate;
-      const milderung = (jahresLst - freigrenze) * T.soli_milderungs_rate;
-      return Math.min(full, milderung);
+
+    // Minimal XML walker. The PAP XML is regular; we parse it on the fly using
+    // regex-driven tokenization. Each method body is a list of statements.
+    //
+    // Statement types:
+    //   { type:'eval',    expr }      // <EVAL exec="..."/>
+    //   { type:'execute', method }    // <EXECUTE method="..."/>
+    //   { type:'if',      cond, then, else } // <IF><THEN>...<ELSE>...</IF>
+    //
+    // Whitespace and comments are stripped during parse.
+
+    function parseStatements(body) {
+      const stmts = [];
+      let i = 0;
+      while (i < body.length) {
+        // Skip whitespace and comments
+        while (i < body.length) {
+          const wsMatch = /^\s+/.exec(body.slice(i));
+          if (wsMatch) { i += wsMatch[0].length; continue; }
+          if (body.startsWith('<!--', i)) {
+            const end = body.indexOf('-->', i);
+            if (end < 0) throw new Error('Unterminated comment');
+            i = end + 3;
+            continue;
+          }
+          break;
+        }
+        if (i >= body.length) break;
+
+        // <EVAL exec="..."/>
+        let m = /^<EVAL\s+exec\s*=\s*"((?:[^"\\]|\\.)*)"\s*\/>/.exec(body.slice(i));
+        if (m) { stmts.push({ type: 'eval', expr: m[1] }); i += m[0].length; continue; }
+
+        // <EXECUTE method="..."/>
+        m = /^<EXECUTE\s+method\s*=\s*"(\w+)"\s*\/>/.exec(body.slice(i));
+        if (m) { stmts.push({ type: 'execute', method: m[1] }); i += m[0].length; continue; }
+
+        // <IF expr="...">...</IF>
+        m = /^<IF\s+expr\s*=\s*"((?:[^"\\]|\\.)*)"\s*>/.exec(body.slice(i));
+        if (m) {
+          const cond = m[1];
+          i += m[0].length;
+          const ifEnd = findMatchingClose(body, i, 'IF');
+          const inner = body.slice(i, ifEnd);
+          i = ifEnd + '</IF>'.length;
+          const { then: thenStmts, else: elseStmts } = parseThenElse(inner);
+          stmts.push({ type: 'if', cond, then: thenStmts, else: elseStmts });
+          continue;
+        }
+
+        // </THEN> </ELSE> are handled in parseThenElse, so we should never see them here.
+        throw new Error('Unexpected at offset ' + i + ': ' + body.slice(i, i + 60));
+      }
+      return stmts;
     }
-    function kirchensteuerRate({ bundesland, konfession }) {
-      if (!konfession || konfession === '--' || konfession === 'ka') return 0;
-      return (bundesland === 'BY' || bundesland === 'BW') ? 0.08 : 0.09;
+
+    function findMatchingClose(s, start, tag) {
+      // Find matching </tag> handling nested <tag> opens.
+      const openRe = new RegExp('<' + tag + '\\b', 'g');
+      const closeRe = new RegExp('</' + tag + '>', 'g');
+      let depth = 1;
+      let pos = start;
+      while (depth > 0) {
+        openRe.lastIndex = pos;
+        closeRe.lastIndex = pos;
+        const o = openRe.exec(s);
+        const c = closeRe.exec(s);
+        if (!c) throw new Error('Unmatched <' + tag + '>');
+        if (o && o.index < c.index) { depth++; pos = o.index + tag.length + 1; }
+        else { depth--; if (depth === 0) return c.index; pos = c.index + tag.length + 3; }
+      }
+      throw new Error('Unreachable');
     }
-    function calculateLohnsteuer(p) {
-      const brutto = +p.brutto;
-      const steuerklasse = +p.steuerklasse || 1;
-      const freibetragMonatlich = +p.freibetragMonatlich || 0;
-      const jahresfreibetrag = freibetragMonatlich * 12;
-      const annualBrutto = brutto * 12;
-      const jLst = jahresLohnsteuer({ annualBrutto, steuerklasse, faktor: p.faktor, jahresfreibetrag });
-      const jSoli = jahresSoli({ jahresLst: jLst, steuerklasse });
-      const kStRate = kirchensteuerRate({ bundesland: p.bundesland, konfession: p.konfession });
-      const jKst = jLst * kStRate;
+
+    function parseThenElse(inner) {
+      // Inner = whitespace + <THEN>...</THEN> + (whitespace + <ELSE>...</ELSE>)?
+      let i = 0;
+      while (/\s/.test(inner[i])) i++;
+      if (!inner.startsWith('<THEN>', i)) throw new Error('Expected <THEN>');
+      i += '<THEN>'.length;
+      const thenEnd = findMatchingClose(inner, i, 'THEN');
+      const thenBody = inner.slice(i, thenEnd);
+      i = thenEnd + '</THEN>'.length;
+      while (i < inner.length && /\s/.test(inner[i])) i++;
+      let elseBody = '';
+      if (inner.startsWith('<ELSE>', i)) {
+        i += '<ELSE>'.length;
+        const elseEnd = findMatchingClose(inner, i, 'ELSE');
+        elseBody = inner.slice(i, elseEnd);
+      }
+      return { then: parseStatements(thenBody), else: parseStatements(elseBody) };
+    }
+
+    // Extract methods from the XML source.
+    function parseMethods(xml) {
+      const methods = {};
+      // <MAIN>…</MAIN> is the root; treat it like a method named MAIN.
+      const mainMatch = /<MAIN>([\s\S]*?)<\/MAIN>/.exec(xml);
+      if (mainMatch) methods.MAIN = parseStatements(mainMatch[1]);
+      const re = /<METHOD\s+name="(\w+)"\s*>([\s\S]*?)<\/METHOD>/g;
+      let m;
+      while ((m = re.exec(xml))) methods[m[1]] = parseStatements(m[2]);
+      return methods;
+    }
+
+    // Extract initial state (defaults for INPUT / INTERNAL).
+    // Defaults can be: BigDecimal.ZERO, BigDecimal.valueOf(N), explicit numbers,
+    // or `new BigDecimal(N)`. Arrays (TABx) are read from <CONSTANT>.
+    function parseInitialState(xml) {
+      const state = {};
+      // Tolerant patterns — handle attribute order and typos like "defaul=" in some PAP files.
+      const inputRe = /<INPUT\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
+      const internalRe = /<INTERNAL\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
+      const outputRe = /<OUTPUT\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
+      for (const re of [inputRe, internalRe, outputRe]) {
+        let m;
+        while ((m = re.exec(xml))) {
+          const name = m[1];
+          const dflt = m[2];
+          if (!dflt || dflt === 'BigDecimal.ZERO') state[name] = 0;
+          else if (dflt === 'BigDecimal.ONE') state[name] = 1;
+          else if (/^BigDecimal\.valueOf\((-?[\d.]+)\)$/.test(dflt)) state[name] = +RegExp.$1;
+          else if (/^new BigDecimal\("?(-?[\d.]+)"?\)$/.test(dflt)) state[name] = +RegExp.$1;
+          else if (/^-?[\d.]+$/.test(dflt)) state[name] = +dflt;
+          else state[name] = 0; // unknown default form; will be set during execution
+        }
+      }
+      // Constants — only the numeric ones (ZAHL*) and arrays
+      const constRe = /<CONSTANT\s+name="(\w+)"\s+type="(BigDecimal(?:\[\])?)"\s+value="([^"]+)"\s*\/>/g;
+      let c;
+      while ((c = constRe.exec(xml))) {
+        const name = c[1], type = c[2], value = c[3];
+        if (type === 'BigDecimal[]') {
+          // value like "{BigDecimal.ZERO, BigDecimal.valueOf(0.4), …}"
+          const items = value.slice(1, -1).split(',').map(s => {
+            const t = s.trim();
+            if (t === 'BigDecimal.ZERO') return 0;
+            if (t === 'BigDecimal.ONE') return 1;
+            const m = /BigDecimal\.valueOf\(\s*(-?[\d.]+)\s*\)/.exec(t);
+            if (m) return +m[1];
+            return Number(t);
+          });
+          state[name] = items;
+        } else if (value === 'BigDecimal.ZERO') state[name] = 0;
+        else if (value === 'BigDecimal.ONE') state[name] = 1;
+        else {
+          const m = /BigDecimal\.valueOf\(\s*(-?[\d.]+)\s*\)/.exec(value);
+          state[name] = m ? +m[1] : Number(value);
+        }
+      }
+      return state;
+    }
+
+    // Compile a method body's statements into a JS function source.
+    function compileStatements(stmts) {
+      return stmts.map(compileStatement).join('\n');
+    }
+
+    function compileStatement(s) {
+      if (s.type === 'eval') {
+        // EVAL exec is of the form "LHS = RHS". Split on the first '=' that is NOT
+        // part of '==', '<=', '>=', '!='.
+        const m = /^([^=<>!]+?)\s*=\s*(?!=)(.+)$/.exec(s.expr);
+        if (!m) {
+          const js = convertExpr(s.expr);
+          return scopeVars(js) + ';';
+        }
+        const lhs = m[1].trim();
+        const rhs = m[2].trim();
+        const lhsJS = convertExpr(lhs);
+        const rhsJS = convertExpr(rhs);
+        return scopeVars(lhsJS) + ' = ' + scopeVars(rhsJS) + ';';
+      }
+      if (s.type === 'execute') {
+        return `_M.${s.method}.call(this);`;
+      }
+      if (s.type === 'if') {
+        const cond = scopeVars(convertExpr(s.cond));
+        return `if (${cond}) {\n${compileStatements(s.then)}\n}` +
+          (s.else.length ? ` else {\n${compileStatements(s.else)}\n}` : '');
+      }
+      throw new Error('Unknown stmt: ' + s.type);
+    }
+
+    // Make every variable reference go through `this.`. We use a name list so we
+    // only prefix actual PAP variables, not local helpers like `_add`, `Math`, etc.
+    let _varNames = null;
+    function setVarNames(names) { _varNames = new Set(names); }
+    function scopeVars(src) {
+      return src.replace(/\b([A-Za-z_]\w*)\b/g, (m, name) => {
+        if (_varNames && _varNames.has(name)) return `this.${name}`;
+        return m;
+      });
+    }
+
+    function compilePap(xml) {
+      // Strip comments globally — they appear inside method bodies and confuse the
+      // structural regex that expects <THEN>/<ELSE> right after <IF>.
+      xml = xml.replace(/<!--[\s\S]*?-->/g, '');
+      // Decode XML entities that appear in expr/exec attributes (mostly < and >).
+      xml = xml.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+      const methods = parseMethods(xml);
+      const state = parseInitialState(xml);
+      setVarNames(Object.keys(state));
+      const compiledMethods = {};
+      const helperNames = Object.keys(_api);
+      for (const [name, stmts] of Object.entries(methods)) {
+        const body = compileStatements(stmts);
+        try {
+          compiledMethods[name] = new Function('_M', ...helperNames, body);
+        } catch (e) {
+          throw new Error(`Failed compiling ${name}: ${e.message}\n--- body ---\n${body}\n--- end ---`);
+        }
+      }
+      setVarNames(null);
       return {
-        lohnsteuer: Math.round((jLst / 12) * 100) / 100,
-        soli: Math.round((jSoli / 12) * 100) / 100,
-        kirchensteuer: Math.round((jKst / 12) * 100) / 100,
-        steuerBrutto: brutto,
+        initialState: state,
+        methods: compiledMethods,
+        run(inputs) {
+          const ctx = { ...this.initialState, ...inputs };
+          const helpers = helperNames.map(k => _api[k]);
+          // Wrap each method so that `this` is bound to ctx and helpers are passed
+          // as positional args along with the method map.
+          const wrappedMethods = {};
+          for (const k of Object.keys(this.methods)) {
+            wrappedMethods[k] = { call: (t) => this.methods[k].call(t, wrappedMethods, ...helpers) };
+          }
+          this.methods.MAIN.call(ctx, wrappedMethods, ...helpers);
+          return ctx;
+        },
       };
+    }
+
+    const PAP_XML_2026 = `<PAP name="Lohnsteuer2026" version="1.0" versionNummer="1.0">   
+        <VARIABLES> 
+    		<!-- Stand: 2025-10-23 12:40 -->
+    		<!-- ITZBund Berlin --> 
+
+       		 <!--  EINGABEPARAMETER  -->
+            <INPUTS>
+                <!-- 1, wenn die Anwendung des Faktorverfahrens gewählt wurden (nur in Steuerklasse IV) -->
+    	        <INPUT name="af" type="int" default="1"/>
+    	
+    	        <!-- Auf die Vollendung des 64. Lebensjahres folgende
+    	             Kalenderjahr (erforderlich, wenn ALTER1=1) -->
+    	        <INPUT name="AJAHR" type="int" default="0"/>
+    	
+    	        <!-- 1, wenn das 64. Lebensjahr zu Beginn des Kalenderjahres vollendet wurde, in dem
+    	             der Lohnzahlungszeitraum endet (§ 24 a EStG), sonst = 0 -->
+    	        <INPUT name="ALTER1" type="int" default="0"/>
+    	        
+    	      	<!-- Merker für die Vorsorgepauschale
+    				 0 = der Arbeitnehmer ist in der Arbeitslosenversicherung pflichtversichert; es gilt die allgemeine Beitragsbemessungsgrenze
+    				 1 = wenn nicht 0 -->
+    	        <INPUT name="ALV" type="int" default="0"/>
+    	
+    	        <!-- eingetragener Faktor mit drei Nachkommastellen -->
+    	        <INPUT name="f" type="double" default="1.0"/>
+    	
+    	        <!-- Jahresfreibetrag für die Ermittlung der Lohnsteuer für die sonstigen Bezüge 
+    	             sowie für Vermögensbeteiligungen nach § 19a Absatz 1 und 4 EStG nach Maßgabe der 
+    	             elektronischen Lohnsteuerabzugsmerkmale nach § 39e EStG oder der Eintragung 
+    	             auf der Bescheinigung für den Lohnsteuerabzug 2026 in Cent (ggf. 0) -->
+    	        <INPUT name="JFREIB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Jahreshinzurechnungsbetrag für die Ermittlung der Lohnsteuer für die sonstigen Bezüge
+    	             sowie für Vermögensbeteiligungen nach § 19a Absatz 1 und 4 EStG nach Maßgabe der 
+    	             elektronischen Lohnsteuerabzugsmerkmale nach § 39e EStG oder der Eintragung auf der 
+    	             Bescheinigung für den Lohnsteuerabzug 2026 in Cent (ggf. 0) -->
+    	        <INPUT name="JHINZU" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Voraussichtlicher Jahresarbeitslohn ohne sonstige Bezüge (d.h. auch ohne 
+    	             die zu besteuernden Vorteile bei Vermögensbeteiligungen,
+    	             § 19a Absatz 4 EStG) in Cent. 
+    	             Anmerkung: Die Eingabe dieses Feldes (ggf. 0) ist erforderlich bei Eingaben zu sonstigen 
+    	             Bezügen (Feld SONSTB). 
+    	             Sind in einem vorangegangenen Abrechnungszeitraum bereits sonstige Bezüge gezahlt worden,
+    	             so sind sie dem voraussichtlichen Jahresarbeitslohn hinzuzurechnen. Gleiches gilt für zu 
+    	             besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 4 EStG). --> 
+    	        <INPUT name="JRE4" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	        
+    	        <!-- In JRE4 enthaltene Entschädigungen nach § 24 Nummer 1 EStG und zu besteuernde
+    	             Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 4 EStG) in Cent  -->
+    	    	<INPUT name="JRE4ENT" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	 
+    	        <!-- In JRE4 enthaltene Versorgungsbezüge in Cent (ggf. 0) -->
+    	        <INPUT name="JVBEZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    			<!--Merker für die Vorsorgepauschale
+    				0 = der Arbeitnehmer ist in der gesetzlichen Rentenversicherung oder einer 
+    				berufsständischen Versorgungseinrichtung pflichtversichert oder bei Befreiung von der 
+    				Versicherungspflicht freiwillig versichert; es gilt die allgemeine Beitragsbemessungsgrenze
+    				
+    				1 = wenn nicht 0
+    				 -->
+    	        <INPUT name="KRV" type="int" default="0"/>
+    	
+    			<!-- Kassenindividueller Zusatzbeitragssatz bei einem gesetzlich krankenversicherten Arbeitnehmer 
+    			 in Prozent (bspw. 2,50 für 2,50 %) mit 2 Dezimalstellen. 
+    			 Es ist der volle Zusatzbeitragssatz anzugeben. Die Aufteilung in Arbeitnehmer- und Arbeitgeber-
+    			 anteil erfolgt im Programmablauf. -->
+    			<INPUT name="KVZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Lohnzahlungszeitraum:
+    	             1 = Jahr
+    	             2 = Monat
+    	             3 = Woche
+    	             4 = Tag -->
+    	        <INPUT name="LZZ" type="int" default="1"/>
+    	
+    	        <!-- Der als elektronisches Lohnsteuerabzugsmerkmal für den Arbeitgeber nach § 39e EStG festgestellte 
+    	             oder in der Bescheinigung für den Lohnsteuerabzug 2026 eingetragene Freibetrag für den 
+    	             Lohnzahlungszeitraum in Cent -->
+    	        <INPUT name="LZZFREIB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Der als elektronisches Lohnsteuerabzugsmerkmal für den Arbeitgeber nach § 39e EStG festgestellte 
+    	             oder in der Bescheinigung für den Lohnsteuerabzug 2026 eingetragene Hinzurechnungsbetrag für den
+    	             Lohnzahlungszeitraum in Cent -->
+    	        <INPUT name="LZZHINZU" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Nicht zu besteuernde Vorteile bei Vermögensbeteiligungen 
+    	             (§ 19a Absatz 1 Satz 4 EStG) in Cent -->
+    	        <INPUT name="MBV" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    	        <!-- Dem Arbeitgeber mitgeteilte Beiträge des Arbeitnehmers für eine private
+    	             Basiskranken- bzw. Pflege-Pflichtversicherung im Sinne des 
+    	             § 10 Absatz 1 Nummer 3 EStG in Cent; der Wert ist unabhängig vom Lohnzahlungszeitraum 
+    	             immer als Monatsbetrag anzugeben -->
+    	        <INPUT name="PKPV" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    	        <!-- Arbeitgeberzuschuss für eine private Basiskranken- bzw. Pflege-Pflichtversicherung im 
+    	             Sinne des § 10 Absatz 1 Nummer 3 EStG in Cent; der Wert ist unabhängig vom 
+    	             Lohnzahlungszeitraum immer als Monatsbetrag anzugeben-->
+    	        <INPUT name="PKPVAGZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	        
+    	        <!-- Krankenversicherung:
+    	             0 = gesetzlich krankenversicherte Arbeitnehmer
+    	             1 = ausschließlich privat krankenversicherte Arbeitnehmer -->
+    	        <INPUT name="PKV" type="int" default="0"/>
+    	        
+    	        <!-- Zahl der beim Arbeitnehmer zu berücksichtigenden Beitragsabschläge in der sozialen Pflegeversicherung
+    	             bei mehr als einem Kind
+    	             0 = kein Abschlag
+    				 1 = Beitragsabschlag für das 2. Kind
+    				 2 = Beitragsabschläge für das 2. und 3. Kind
+    				 3 = Beitragsabschläge für 2. bis 4. Kinder
+    				 4 = Beitragsabschläge für 2. bis 5. oder mehr Kinder   -->
+    	        <INPUT name="PVA" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	        
+    	        
+    	        <!-- 1, wenn bei der sozialen Pflegeversicherung die Besonderheiten in Sachsen zu berücksichtigen sind bzw. 
+    	        	 	zu berücksichtigen wären -->
+    	        <INPUT name="PVS" type="int" default="0"/>
+    	
+    	        <!-- 1, wenn er der Arbeitnehmer den Zuschlag zur sozialen Pflegeversicherung 
+    	        	 	zu zahlen hat -->
+    	        <INPUT name="PVZ" type="int" default="0"/>
+    	        
+    	        <!-- Religionsgemeinschaft des Arbeitnehmers lt. elektronischer Lohnsteuerabzugsmerkmale oder der 
+    	             Bescheinigung für den Lohnsteuerabzug 2026 (bei keiner Religionszugehörigkeit = 0) -->
+    	        <INPUT name="R" type="int"/>
+    	
+    	        <!-- Steuerpflichtiger Arbeitslohn für den Lohnzahlungszeitraum vor Berücksichtigung des 
+    	             Versorgungsfreibetrags und des Zuschlags zum Versorgungsfreibetrag, des Altersentlastungsbetrags 
+    	             und des als elektronisches Lohnsteuerabzugsmerkmal festgestellten oder in der Bescheinigung für 
+    	             den Lohnsteuerabzug 2026 für den Lohnzahlungszeitraum eingetragenen Freibetrags bzw. 
+    	             Hinzurechnungsbetrags in Cent -->
+    	        <INPUT name="RE4" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Sonstige Bezüge einschließlich zu besteuernde Vorteile bei Vermögensbeteiligungen und Sterbegeld bei Versorgungsbezügen sowie 
+    	             Kapitalauszahlungen/Abfindungen, in Cent (ggf. 0) -->
+    	        <INPUT name="SONSTB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	        
+    	        <!-- In SONSTB enthaltene Entschädigungen nach § 24 Nummer 1 EStG sowie zu besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a
+    			     Absatz 4 EStG), in Cent -->
+    	    	<INPUT name="SONSTENT" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Sterbegeld bei Versorgungsbezügen sowie Kapitalauszahlungen/Abfindungen
+    	              (in SONSTB enthalten), in Cent -->
+    	        <INPUT name="STERBE" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Steuerklasse:
+    	             1 = I
+    	             2 = II
+    	             3 = III
+    	             4 = IV
+    	             5 = V
+    	             6 = VI -->
+    	        <INPUT name="STKL" type="int" default="1"/>
+    	
+    	        <!-- In RE4 enthaltene Versorgungsbezüge in Cent (ggf. 0) ggf. unter Berücksichtigung 
+    	             einer geänderten Bemessungsgrundlage nach  § 19 Absatz 2 Satz 10 und 11 EStG -->
+    	        <INPUT name="VBEZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Versorgungsbezug im Januar 2005 bzw. für den ersten vollen Monat, wenn der 
+    	             Versorgungsbezug erstmalig nach Januar 2005 gewährt  wurde, in Cent -->
+    	        <INPUT name="VBEZM" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Voraussichtliche Sonderzahlungen von Versorgungsbezügen im
+    				 Kalenderjahr des Versorgungsbeginns bei Versorgungsempfängern
+    				 ohne Sterbegeld, Kapitalauszahlungen/Abfindungen in Cent
+    			-->
+    	        <INPUT name="VBEZS" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- In SONSTB enthaltene Versorgungsbezüge einschließlich Sterbegeld in Cent (ggf. 0) -->
+    	        <INPUT name="VBS" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Jahr, in dem der Versorgungsbezug erstmalig gewährt wurde;
+    				 werden mehrere Versorgungsbezüge gezahlt, wird aus
+    				 Vereinfachungsgründen für die Berechnung das Jahr des ältesten
+    				 erstmaligen Bezugs herangezogen; auf die Möglichkeit der
+    				 getrennten Abrechnung verschiedenartiger Bezüge (§ 39e Absatz 5a
+    				 EStG) wird im Übrigen verwiesen -->
+    	        <INPUT name="VJAHR" type="int" defaul="0"/>
+    		
+    	        <!-- Zahl der Freibeträge für Kinder (eine Dezimalstelle, nur bei Steuerklassen
+    	             I, II, III und IV) -->
+    	        <INPUT name="ZKF" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Zahl der Monate, für die Versorgungsbezüge gezahlt werden [nur
+    	             erforderlich bei Jahresberechnung (LZZ = 1)] -->
+    	        <INPUT name="ZMVB" type="int" default="0"/>
+    	        
+
+        	</INPUTS>
+
+        	<!--  AUSGABEPARAMETER  -->
+    		<OUTPUTS type="STANDARD">
+    	        <!-- Bemessungsgrundlage für die Kirchenlohnsteuer in Cent -->
+    	        <OUTPUT name="BK" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Bemessungsgrundlage der sonstigen Bezüge  für die Kirchenlohnsteuer in Cent.
+                     Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei 
+                     Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) resultieren, mindern BK 
+                     (maximal bis 0). Der Sonderausgabenabzug für tatsächlich erbrachte Vorsorgeaufwendungen 
+                     im Rahmen der Veranlagung zur Einkommensteuer bleibt unberührt. -->
+    	        <OUTPUT name="BKS" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	
+    	        <!-- Für den Lohnzahlungszeitraum einzubehaltende Lohnsteuer in Cent -->
+    	        <OUTPUT name="LSTLZZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Für den Lohnzahlungszeitraum einzubehaltender Solidaritätszuschlag
+    	             in Cent -->
+    	        <OUTPUT name="SOLZLZZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Solidaritätszuschlag für sonstige Bezüge in Cent.
+    				 Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei
+    				 Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) resultieren,
+    				 mindern SOLZLZZ (maximal bis 0). Der Sonderausgabenabzug für
+    				 tatsächlich erbrachte Vorsorgeaufwendungen im Rahmen der
+    				 Veranlagung zur Einkommensteuer bleibt unberührt. -->
+    	        <OUTPUT name="SOLZS" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    	        <!-- Lohnsteuer für sonstige Bezüge in Cent
+                     Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei Vermögensbeteiligungen
+                     (§ 19a Absatz 1 Satz 4 EStG) resultieren, mindern LSTLZZ (maximal bis 0). Der 
+                     Sonderausgabenabzug für tatsächlich erbrachte Vorsorgeaufwendungen im Rahmen der 
+                     Veranlagung zur Einkommensteuer bleibt unberührt. -->
+    	        <OUTPUT name="STS" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        		
+    		</OUTPUTS>
+    		
+    		<!--  AUSGABEPARAMETER DBA  -->
+    		<OUTPUTS type="DBA">
+    		
+    			<!-- Verbrauchter Freibetrag bei Berechnung des laufenden Arbeitslohns, in Cent -->
+    			<OUTPUT name="VFRB" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    			
+    			<!-- Verbrauchter Freibetrag bei Berechnung des voraussichtlichen Jahresarbeitslohns, in Cent -->
+    			<OUTPUT name="VFRBS1" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    			
+    			<!-- Verbrauchter Freibetrag bei Berechnung der sonstigen Bezüge, in Cent -->
+    			<OUTPUT name="VFRBS2" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    			
+    			<!-- Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE über 
+    				dem Grundfreibetrag bei der Berechnung des laufenden Arbeitslohns, in Cent -->
+    			<OUTPUT name="WVFRB" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    			
+    			<!-- Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE über dem Grundfreibetrag 
+    				bei der Berechnung des voraussichtlichen Jahresarbeitslohns, in Cent -->
+    			<OUTPUT name="WVFRBO" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    			
+    			<!-- Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE 
+    				über dem Grundfreibetrag bei der Berechnung der sonstigen Bezüge, in Cent -->
+    			<OUTPUT name="WVFRBM" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    		</OUTPUTS>
+
+    	    <!--  INTERNE FELDER  -->
+    		<INTERNALS>
+    		        <!-- Altersentlastungsbetrag in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="ALTE" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Arbeitnehmer-Pauschbetrag/Werbungskosten-Pauschbetrag in Euro -->
+    		        <INTERNAL name="ANP" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf den Lohnzahlungszeitraum entfallender Anteil von Jahreswerten
+    		             auf ganze Cent abgerundet -->
+    		        <INTERNAL name="ANTEIL1" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Beitragssatz des Arbeitnehmers zur Arbeitslosenversicherung (4 Dezimalstellen) -->
+    		        <INTERNAL name="AVSATZAN" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        		
+    		        <!-- Beitragsbemessungsgrenze in der gesetzlichen Krankenversicherung 
+    		        	 und der sozialen Pflegeversicherung in Euro -->
+    		        <INTERNAL name="BBGKVPV" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Allgemeine Beitragsbemessungsgrenze in der allgemeinen Rentenversicherung und Arbeitslosenversicherung in Euro -->
+    		        <INTERNAL name="BBGRVALV" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Bemessungsgrundlage für Altersentlastungsbetrag in Euro, Cent
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="BMG" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Differenz zwischen ST1 und ST2 in Euro -->
+    		        <INTERNAL name="DIFF" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Entlastungsbetrag für Alleinerziehende in Euro -->
+    		        <INTERNAL name="EFA" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="FVB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) für die Berechnung
+    		             der Lohnsteuer beim sonstigen Bezug -->
+    			    <INTERNAL name="FVBSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zuschlag zum Versorgungsfreibetrag in Euro -->
+    		        <INTERNAL name="FVBZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zuschlag zum Versorgungsfreibetrag in Euro für die Berechnung
+    		             der Lohnsteuer beim sonstigen Bezug -->
+    			    <INTERNAL name="FVBZSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		 
+    		     	<!-- Grundfreibetrag in Euro -->
+    		        <INTERNAL name="GFB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		 
+    		        <!-- Maximaler Altersentlastungsbetrag in Euro -->
+    		        <INTERNAL name="HBALTE" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Maßgeblicher maximaler Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="HFVB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Maßgeblicher maximaler Zuschlag zum Versorgungsfreibetrag in Euro, Cent
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="HFVBZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Maßgeblicher maximaler Zuschlag zum Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) 
+    		             für die Berechnung der Lohnsteuer für den sonstigen Bezug -->
+    		        <INTERNAL name="HFVBZSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    				
+    				<!-- Zwischenfeld zu X für die Berechnung der Steuer nach § 39b
+    		             Absatz 2 Satz 7 EStG in Euro -->
+    		        <INTERNAL name="HOCH" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		         <!-- Nummer der Tabellenwerte für Versorgungsparameter -->
+    		        <INTERNAL name="J" type="int" default="0"/>
+    		
+    		        <!-- Jahressteuer nach § 51a EStG, aus der Solidaritätszuschlag und
+    		             Bemessungsgrundlage für die Kirchenlohnsteuer ermittelt werden in Euro -->
+    		        <INTERNAL name="JBMG" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechneter LZZFREIB in Euro, Cent
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="JLFREIB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnete LZZHINZU in Euro, Cent
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="JLHINZU" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Jahreswert, dessen Anteil für einen Lohnzahlungszeitraum in
+    		             UPANTEIL errechnet werden soll in Cent -->
+    		        <INTERNAL name="JW" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		        <!-- Nummer der Tabellenwerte für Parameter bei Altersentlastungsbetrag -->
+    		        <INTERNAL name="K" type="int" default="0"/>
+    				 
+    		        <!-- Summe der Freibeträge für Kinder in Euro -->
+    		        <INTERNAL name="KFB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Beitragssatz des Arbeitnehmers zur Krankenversicherung
+    					 (5 Dezimalstellen) -->
+    		        <INTERNAL name="KVSATZAN" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		       <!-- Kennzahl für die Einkommensteuer-Tabellenart:
+    		             1 = Grundtarif
+    		             2 = Splittingverfahren -->
+    		        <INTERNAL name="KZTAB" type="int" default="0"/>
+    		
+    		        <!-- Jahreslohnsteuer in Euro -->
+    		        <INTERNAL name="LSTJAHR" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zwischenfelder der Jahreslohnsteuer in Cent -->
+    		        <INTERNAL name="LSTOSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        <INTERNAL name="LSTSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Mindeststeuer für die Steuerklassen V und VI in Euro -->
+    		        <INTERNAL name="MIST" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreswert hochgerechneter Arbeitgeberzuschuss für eine private Basiskranken- 
+    		             bzw. Pflege-Pflichtversicherung im Sinne des § 10 Absatz 1 Nummer 3 EStG in Euro, Cent (2 Dezimalstellen)-->
+    		        <INTERNAL name="PKPVAGZJ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Beitragssatz des Arbeitnehmers zur Pflegeversicherung (6 Dezimalstellen)-->
+    		        <INTERNAL name="PVSATZAN" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    				<!-- Beitragssatz des Arbeitnehmers in der allgemeinen gesetzlichen Rentenversicherung (4 Dezimalstellen)  -->
+    			    <INTERNAL name="RVSATZAN" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Rechenwert in Gleitkommadarstellung -->
+    		        <INTERNAL name="RW" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Sonderausgaben-Pauschbetrag in Euro -->
+    		        <INTERNAL name="SAP" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Freigrenze für den Solidaritätszuschlag in Euro -->
+    		        <INTERNAL name="SOLZFREI" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Solidaritätszuschlag auf die Jahreslohnsteuer in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="SOLZJ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zwischenwert für den Solidaritätszuschlag auf die Jahreslohnsteuer
+    		             in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="SOLZMIN" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Bemessungsgrundlage des Solidaritätszuschlags zur Prüfung der Freigrenze beim Solidaritätszuschlag für sonstige Bezüge in Euro -->
+    		        <INTERNAL name="SOLZSBMG" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Zu versteuerndes Einkommen für die Ermittlung der
+    		        	 Bemessungsgrundlage des Solidaritätszuschlags zur Prüfung der
+    		        	 Freigrenze beim Solidaritätszuschlag für sonstige Bezüge in Euro,
+    		        	 Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="SOLZSZVE" type="BigDecimal" default="BigDecimal.ZERO"/>
+    	
+    		        <!-- Tarifliche Einkommensteuer in Euro -->
+    		        <INTERNAL name="ST" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Tarifliche Einkommensteuer auf das 1,25-fache ZX in Euro -->
+    		        <INTERNAL name="ST1" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Tarifliche Einkommensteuer auf das 0,75-fache ZX in Euro -->
+    		        <INTERNAL name="ST2" type="BigDecimal" default="BigDecimal.ZERO"/>	
+    		 
+    		        <!-- Bemessungsgrundlage für den Versorgungsfreibetrag in Cent -->
+    		        <INTERNAL name="VBEZB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Bemessungsgrundlage für den Versorgungsfreibetrag in Cent für
+    		             den sonstigen Bezug -->
+    		        <INTERNAL name="VBEZBSO" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		         <!-- Zwischenfeld zu X für die Berechnung der Steuer nach § 39b
+    		             Absatz 2 Satz 7 EStG in Euro -->
+    		        <INTERNAL name="VERGL" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		        <!-- Auf den Höchstbetrag begrenzte Beiträge zur Arbeitslosenversicherung 
+    		             einschließlich Kranken- und Pflegeversicherung in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="VSPHB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    				        
+    		        <!-- Vorsorgepauschale mit Teilbeträgen für die Rentenversicherung
+    					 sowie die gesetzliche Kranken- und soziale Pflegeversicherung nach
+    					 fiktiven Beträgen oder ggf. für die private Basiskrankenversicherung
+    					 und private Pflege-Pflichtversicherung in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="VSP" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Vorsorgepauschale mit Teilbeträgen für die Rentenversicherung sowie auf den Höchstbetrag 
+    		             begrenzten Teilbeträgen für die Arbeitslosen-, Kranken- und Pflegeversicherung in 
+    		             Euro, Cent (2 Dezimalstellen)-->
+    		        <INTERNAL name="VSPN" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Teilbetrag für die Arbeitslosenversicherung bei der Berechnung der
+    		             Vorsorgepauschale in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="VSPALV" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Vorsorgepauschale mit Teilbeträgen für die gesetzliche Kranken- und soziale Pflegeversicherung 
+    		             nach fiktiven Beträgen oder ggf. für die private Basiskrankenversicherung und private 
+    		             Pflege-Pflichtversicherung in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="VSPKVPV" type="BigDecimal" default="BigDecimal.ZERO"/>
+    				
+    				<!-- Teilbetrag für die Rentenversicherung bei der Berechnung der Vorsorgepauschale 
+    				     in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="VSPR" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		        <!-- Erster Grenzwert in Steuerklasse V/VI in Euro -->
+    		        <INTERNAL name="W1STKL5" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    		        
+    		        <!-- Zweiter Grenzwert in Steuerklasse V/VI in Euro -->
+    		        <INTERNAL name="W2STKL5" type="BigDecimal" default="BigDecimal.ZERO"/> 
+    		        
+    		        <!-- Dritter Grenzwert in Steuerklasse V/VI in Euro -->
+    		        <INTERNAL name="W3STKL5" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zu versteuerndes Einkommen gem. § 32a Absatz 1 und 5 EStG in Euro, Cent 
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="X" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Gem. § 32a Absatz 1 EStG (6 Dezimalstellen) -->
+    		        <INTERNAL name="Y" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnetes RE4 in Euro, Cent (2 Dezimalstellen)
+    		             nach Abzug der Freibeträge nach § 39 b Absatz 2 Satz 3 und 4 EStG -->
+    		        <INTERNAL name="ZRE4" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnetes RE4 in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZRE4J" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnetes RE4, ggf. nach Abzug der
+    					 Entschädigungen i.S.d. § 24 Nummer 1 EStG in Euro, Cent
+    					 (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZRE4VP" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    		        <!-- Zwischenfeld zu ZRE4VP für die Begrenzung auf die jeweilige 
+    		             Beitragsbemessungsgrenze in Euro, Cent (2 Dezimalstellen)"  -->
+    		        <INTERNAL name="ZRE4VPR" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Feste Tabellenfreibeträge (ohne Vorsorgepauschale) in Euro, Cent
+    		             (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZTABFB" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnetes VBEZ abzüglich FVB in
+    					 Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZVBEZ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Auf einen Jahreslohn hochgerechnetes VBEZ in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZVBEZJ" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		
+    		        <!-- Zu versteuerndes Einkommen in Euro, Cent (2 Dezimalstellen) -->
+    		        <INTERNAL name="ZVE" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		        <!-- Zwischenfeld zu X für die Berechnung der Steuer nach § 39b
+    		             Absatz 2 Satz 7 EStG in Euro -->
+    		        <INTERNAL name="ZX" type="BigDecimal" default="BigDecimal.ZERO"/>
+    		        
+    		        <!-- Zwischenfeld zu X für die Berechnung der Steuer nach § 39b
+    		             Absatz 2 Satz 7 EStG in Euro -->
+    		        <INTERNAL name="ZZX" type="BigDecimal" default="BigDecimal.ZERO"/>
+
+    			</INTERNALS>
+        </VARIABLES>
+
+        <CONSTANTS>
+            <!-- Tabelle für die Prozentsätze des Versorgungsfreibetrags -->
+            
+            <CONSTANT name="TAB1" type="BigDecimal[]" value="{BigDecimal.ZERO, BigDecimal.valueOf( 0.4), BigDecimal.valueOf( 0.384), BigDecimal.valueOf( 0.368), BigDecimal.valueOf( 0.352), BigDecimal.valueOf( 0.336), BigDecimal.valueOf( 0.32), BigDecimal.valueOf( 0.304), BigDecimal.valueOf( 0.288), BigDecimal.valueOf( 0.272), BigDecimal.valueOf( 0.256), BigDecimal.valueOf( 0.24), BigDecimal.valueOf( 0.224), BigDecimal.valueOf( 0.208), BigDecimal.valueOf( 0.192), BigDecimal.valueOf( 0.176), BigDecimal.valueOf( 0.16), BigDecimal.valueOf( 0.152), BigDecimal.valueOf( 0.144), BigDecimal.valueOf( 0.14), BigDecimal.valueOf( 0.136), BigDecimal.valueOf( 0.132), BigDecimal.valueOf( 0.128), BigDecimal.valueOf( 0.124), BigDecimal.valueOf( 0.12), BigDecimal.valueOf( 0.116), BigDecimal.valueOf( 0.112), BigDecimal.valueOf( 0.108), BigDecimal.valueOf( 0.104), BigDecimal.valueOf( 0.1), BigDecimal.valueOf( 0.096), BigDecimal.valueOf( 0.092), BigDecimal.valueOf( 0.088), BigDecimal.valueOf( 0.084), BigDecimal.valueOf( 0.08), BigDecimal.valueOf( 0.076), BigDecimal.valueOf( 0.072), BigDecimal.valueOf( 0.068), BigDecimal.valueOf( 0.064), BigDecimal.valueOf( 0.06), BigDecimal.valueOf( 0.056), BigDecimal.valueOf( 0.052), BigDecimal.valueOf( 0.048), BigDecimal.valueOf( 0.044), BigDecimal.valueOf( 0.04), BigDecimal.valueOf( 0.036), BigDecimal.valueOf( 0.032), BigDecimal.valueOf( 0.028), BigDecimal.valueOf( 0.024), BigDecimal.valueOf( 0.02), BigDecimal.valueOf( 0.016), BigDecimal.valueOf( 0.012), BigDecimal.valueOf( 0.008), BigDecimal.valueOf( 0.004), BigDecimal.valueOf( 0)}"/>
+
+            <!-- Tabelle für die Höchstbeträge des Versorgungsfreibetrags -->
+            
+            <CONSTANT name="TAB2" type="BigDecimal[]" value="{BigDecimal.ZERO, BigDecimal.valueOf( 3000), BigDecimal.valueOf( 2880), BigDecimal.valueOf( 2760), BigDecimal.valueOf( 2640), BigDecimal.valueOf( 2520), BigDecimal.valueOf( 2400), BigDecimal.valueOf( 2280), BigDecimal.valueOf( 2160), BigDecimal.valueOf( 2040), BigDecimal.valueOf( 1920), BigDecimal.valueOf( 1800), BigDecimal.valueOf( 1680), BigDecimal.valueOf( 1560), BigDecimal.valueOf( 1440), BigDecimal.valueOf( 1320), BigDecimal.valueOf( 1200), BigDecimal.valueOf( 1140), BigDecimal.valueOf( 1080), BigDecimal.valueOf( 1050), BigDecimal.valueOf( 1020), BigDecimal.valueOf( 990), BigDecimal.valueOf( 960), BigDecimal.valueOf( 930), BigDecimal.valueOf( 900), BigDecimal.valueOf( 870), BigDecimal.valueOf( 840), BigDecimal.valueOf( 810), BigDecimal.valueOf( 780), BigDecimal.valueOf( 750), BigDecimal.valueOf( 720), BigDecimal.valueOf( 690), BigDecimal.valueOf( 660), BigDecimal.valueOf( 630), BigDecimal.valueOf( 600), BigDecimal.valueOf( 570), BigDecimal.valueOf( 540), BigDecimal.valueOf( 510), BigDecimal.valueOf( 480), BigDecimal.valueOf( 450), BigDecimal.valueOf( 420), BigDecimal.valueOf( 390), BigDecimal.valueOf( 360), BigDecimal.valueOf( 330), BigDecimal.valueOf( 300), BigDecimal.valueOf( 270), BigDecimal.valueOf( 240), BigDecimal.valueOf( 210), BigDecimal.valueOf( 180), BigDecimal.valueOf( 150), BigDecimal.valueOf( 120), BigDecimal.valueOf( 90), BigDecimal.valueOf( 60), BigDecimal.valueOf( 30), BigDecimal.valueOf( 0) }"/>
+
+            <!-- Tabelle für die Zuschläge zum Versorgungsfreibetrag -->
+            
+            <CONSTANT name="TAB3" type="BigDecimal[]" value="{BigDecimal.ZERO, BigDecimal.valueOf( 900), BigDecimal.valueOf( 864), BigDecimal.valueOf( 828), BigDecimal.valueOf( 792), BigDecimal.valueOf( 756), BigDecimal.valueOf( 720), BigDecimal.valueOf( 684), BigDecimal.valueOf( 648), BigDecimal.valueOf( 612), BigDecimal.valueOf( 576), BigDecimal.valueOf( 540), BigDecimal.valueOf( 504), BigDecimal.valueOf( 468), BigDecimal.valueOf( 432), BigDecimal.valueOf( 396), BigDecimal.valueOf( 360), BigDecimal.valueOf( 342), BigDecimal.valueOf( 324), BigDecimal.valueOf( 315), BigDecimal.valueOf( 306), BigDecimal.valueOf( 297), BigDecimal.valueOf( 288), BigDecimal.valueOf( 279), BigDecimal.valueOf( 270), BigDecimal.valueOf( 261), BigDecimal.valueOf( 252), BigDecimal.valueOf( 243), BigDecimal.valueOf( 234), BigDecimal.valueOf( 225), BigDecimal.valueOf( 216), BigDecimal.valueOf( 207), BigDecimal.valueOf( 198), BigDecimal.valueOf( 189), BigDecimal.valueOf( 180), BigDecimal.valueOf( 171), BigDecimal.valueOf( 162), BigDecimal.valueOf( 153), BigDecimal.valueOf( 144), BigDecimal.valueOf( 135), BigDecimal.valueOf( 126), BigDecimal.valueOf( 117), BigDecimal.valueOf( 108), BigDecimal.valueOf( 99), BigDecimal.valueOf( 90), BigDecimal.valueOf( 81), BigDecimal.valueOf( 72), BigDecimal.valueOf( 63), BigDecimal.valueOf( 54), BigDecimal.valueOf( 45), BigDecimal.valueOf( 36), BigDecimal.valueOf( 27), BigDecimal.valueOf( 18), BigDecimal.valueOf( 9), BigDecimal.valueOf( 0)}"/>
+
+            <!-- Tabelle für die Höchstbeträge des Altersentlastungsbetrags -->
+            
+            <CONSTANT name="TAB4" type="BigDecimal[]" value="{BigDecimal.ZERO, BigDecimal.valueOf( 0.4), BigDecimal.valueOf( 0.384), BigDecimal.valueOf( 0.368), BigDecimal.valueOf( 0.352), BigDecimal.valueOf( 0.336), BigDecimal.valueOf( 0.32), BigDecimal.valueOf( 0.304), BigDecimal.valueOf( 0.288), BigDecimal.valueOf( 0.272), BigDecimal.valueOf( 0.256), BigDecimal.valueOf( 0.24), BigDecimal.valueOf( 0.224), BigDecimal.valueOf( 0.208), BigDecimal.valueOf( 0.192), BigDecimal.valueOf( 0.176), BigDecimal.valueOf( 0.16), BigDecimal.valueOf( 0.152), BigDecimal.valueOf( 0.144), BigDecimal.valueOf( 0.14), BigDecimal.valueOf( 0.136), BigDecimal.valueOf( 0.132), BigDecimal.valueOf( 0.128), BigDecimal.valueOf( 0.124), BigDecimal.valueOf( 0.12), BigDecimal.valueOf( 0.116), BigDecimal.valueOf( 0.112), BigDecimal.valueOf( 0.108), BigDecimal.valueOf( 0.104), BigDecimal.valueOf( 0.1), BigDecimal.valueOf( 0.096), BigDecimal.valueOf( 0.092), BigDecimal.valueOf( 0.088), BigDecimal.valueOf( 0.084), BigDecimal.valueOf( 0.08), BigDecimal.valueOf( 0.076), BigDecimal.valueOf( 0.072), BigDecimal.valueOf( 0.068), BigDecimal.valueOf( 0.064), BigDecimal.valueOf( 0.06), BigDecimal.valueOf( 0.056), BigDecimal.valueOf( 0.052), BigDecimal.valueOf( 0.048), BigDecimal.valueOf( 0.044), BigDecimal.valueOf( 0.04), BigDecimal.valueOf( 0.036), BigDecimal.valueOf( 0.032), BigDecimal.valueOf( 0.028), BigDecimal.valueOf( 0.024), BigDecimal.valueOf( 0.02), BigDecimal.valueOf( 0.016), BigDecimal.valueOf( 0.012), BigDecimal.valueOf( 0.008), BigDecimal.valueOf( 0.004), BigDecimal.valueOf( 0)}"/>
+
+            <!-- Tabelle fuer die Hächstbeträge des Altersentlastungsbetrags -->
+            
+            <CONSTANT name="TAB5" type="BigDecimal[]" value="{BigDecimal.ZERO, BigDecimal.valueOf( 1900), BigDecimal.valueOf( 1824), BigDecimal.valueOf( 1748), BigDecimal.valueOf( 1672), BigDecimal.valueOf( 1596), BigDecimal.valueOf( 1520), BigDecimal.valueOf( 1444), BigDecimal.valueOf( 1368), BigDecimal.valueOf( 1292), BigDecimal.valueOf( 1216), BigDecimal.valueOf( 1140), BigDecimal.valueOf( 1064), BigDecimal.valueOf( 988), BigDecimal.valueOf( 912), BigDecimal.valueOf( 836), BigDecimal.valueOf( 760), BigDecimal.valueOf( 722), BigDecimal.valueOf( 684), BigDecimal.valueOf( 665), BigDecimal.valueOf( 646), BigDecimal.valueOf( 627), BigDecimal.valueOf( 608), BigDecimal.valueOf( 589), BigDecimal.valueOf( 570), BigDecimal.valueOf( 551), BigDecimal.valueOf( 532), BigDecimal.valueOf( 513), BigDecimal.valueOf( 494), BigDecimal.valueOf( 475), BigDecimal.valueOf( 456), BigDecimal.valueOf( 437), BigDecimal.valueOf( 418), BigDecimal.valueOf( 399), BigDecimal.valueOf( 380), BigDecimal.valueOf( 361), BigDecimal.valueOf( 342), BigDecimal.valueOf( 323), BigDecimal.valueOf( 304), BigDecimal.valueOf( 285), BigDecimal.valueOf( 266), BigDecimal.valueOf( 247), BigDecimal.valueOf( 228), BigDecimal.valueOf( 209), BigDecimal.valueOf( 190), BigDecimal.valueOf( 171), BigDecimal.valueOf( 152), BigDecimal.valueOf( 133), BigDecimal.valueOf( 114), BigDecimal.valueOf( 95), BigDecimal.valueOf( 76), BigDecimal.valueOf( 57), BigDecimal.valueOf( 38), BigDecimal.valueOf( 19), BigDecimal.valueOf( 0)}"/>
+     
+            <!-- Zahlenkonstanten fuer im Plan oft genutzte BigDecimal Werte -->
+            <CONSTANT name="ZAHL1" 		type="BigDecimal" value="BigDecimal.ONE"/>
+            <CONSTANT name="ZAHL2" 		type="BigDecimal" value="BigDecimal.valueOf(2)"/>
+            <CONSTANT name="ZAHL5" 		type="BigDecimal" value="BigDecimal.valueOf(5)"/>
+            <CONSTANT name="ZAHL7" 		type="BigDecimal" value="BigDecimal.valueOf(7)"/>
+            <CONSTANT name="ZAHL12" 	type="BigDecimal" value="BigDecimal.valueOf(12)"/>
+            <CONSTANT name="ZAHL100" 	type="BigDecimal" value="BigDecimal.valueOf(100)"/>
+            <CONSTANT name="ZAHL360" 	type="BigDecimal" value="BigDecimal.valueOf(360)"/>
+            <CONSTANT name="ZAHL500" 	type="BigDecimal" value="BigDecimal.valueOf(500)"/>
+            <CONSTANT name="ZAHL700" 	type="BigDecimal" value="BigDecimal.valueOf(700)"/>
+            <CONSTANT name="ZAHL1000" 	type="BigDecimal" value="BigDecimal.valueOf(1000)"/>
+            <CONSTANT name="ZAHL10000" 	type="BigDecimal" value="BigDecimal.valueOf(10000)"/>
+
+        </CONSTANTS>
+
+        <METHODS>
+
+
+
+      <!-- PROGRAMMABLAUFPLAN 2026 
+           Steueruung, PAP Seite 13 -->
+      <MAIN>
+      	<EXECUTE method="MPARA"/> 
+        <EXECUTE method="MRE4JL"/>
+        <EVAL exec="VBEZBSO= BigDecimal.ZERO"/>
+        
+        <EXECUTE method="MRE4"/>
+        <EXECUTE method="MRE4ABZ"/>
+        <EXECUTE method="MBERECH"/>
+        
+        <EXECUTE method="MSONST"/>
+      </MAIN>
+
+      <!-- Zuweisung von Werten für bestimmte Steuer- und Sozialversicherungsparameter  PAP Seite 14 -->
+      <METHOD name="MPARA">
+           
+            <EVAL exec="BBGRVALV = BigDecimal.valueOf(101400)"/>
+          	<EVAL exec="AVSATZAN = BigDecimal.valueOf(0.013)"/>
+          	<EVAL exec="RVSATZAN = BigDecimal.valueOf(0.093)"/>      	
+          	<EVAL exec="BBGKVPV = BigDecimal.valueOf(69750)"/>
+          	<EVAL exec="KVSATZAN = (KVZ.divide(ZAHL2).divide(ZAHL100)).add(BigDecimal.valueOf(0.07))"/>
+          	      	
+          	<IF expr="PVS == 1">
+          		<THEN>
+          			<EVAL exec="PVSATZAN = BigDecimal.valueOf(0.023)"/>  
+          		</THEN>
+          		<ELSE>
+            		<EVAL exec="PVSATZAN =  BigDecimal.valueOf(0.018)"/>  
+          		</ELSE>
+          	</IF>
+          	<IF expr="PVZ == 1">
+          		<THEN>
+          			<EVAL exec="PVSATZAN = PVSATZAN.add(BigDecimal.valueOf(0.006))"/> 
+          		</THEN>
+          		<ELSE>
+          			<EVAL exec="PVSATZAN = PVSATZAN.subtract(PVA.multiply(BigDecimal.valueOf(0.0025)))"/> 
+          		</ELSE>
+          	</IF>
+          	
+          	 <EVAL exec="W1STKL5 = BigDecimal.valueOf(14071)"/>      
+          	 <EVAL exec="W2STKL5 = BigDecimal.valueOf(34939)"/> 
+          	 <EVAL exec="W3STKL5 = BigDecimal.valueOf(222260)"/>
+          	 <EVAL exec="GFB = BigDecimal.valueOf(12348)"/> 
+          	 <EVAL exec="SOLZFREI = BigDecimal.valueOf(20350)"/> 
+         
+      </METHOD>
+
+      <!-- Ermittlung des Jahresarbeitslohns nach § 39 b Absatz 2 Satz 2 EStG, PAP Seite 15 -->
+      <METHOD name="MRE4JL">
+        <IF expr="LZZ == 1">
+          <THEN>
+            <EVAL exec="ZRE4J= RE4.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="ZVBEZJ= VBEZ.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="JLFREIB= LZZFREIB.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="JLHINZU= LZZHINZU.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+          </THEN>
+          <ELSE>
+            <IF expr="LZZ == 2">
+              <THEN>
+                <EVAL exec="ZRE4J= (RE4.multiply (ZAHL12)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                <EVAL exec="ZVBEZJ= (VBEZ.multiply (ZAHL12)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                <EVAL exec="JLFREIB= (LZZFREIB.multiply (ZAHL12)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                <EVAL exec="JLHINZU= (LZZHINZU.multiply (ZAHL12)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+              </THEN>
+              <ELSE>
+                <IF expr="LZZ == 3">
+                  <THEN>
+                    <EVAL exec="ZRE4J= (RE4.multiply (ZAHL360)).divide (ZAHL700, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="ZVBEZJ= (VBEZ.multiply (ZAHL360)).divide (ZAHL700, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="JLFREIB= (LZZFREIB.multiply (ZAHL360)).divide (ZAHL700, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="JLHINZU= (LZZHINZU.multiply (ZAHL360)).divide (ZAHL700, 2, BigDecimal.ROUND_DOWN)"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="ZRE4J= (RE4.multiply (ZAHL360)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="ZVBEZJ= (VBEZ.multiply (ZAHL360)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="JLFREIB= (LZZFREIB.multiply (ZAHL360)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                    <EVAL exec="JLHINZU= (LZZHINZU.multiply (ZAHL360)).divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+                  </ELSE>
+                </IF>
+              </ELSE>
+            </IF>
+          </ELSE>
+        </IF>
+        <IF expr="af == 0">
+    		<THEN>
+    			<EVAL exec="f= 1"/>
+    		</THEN>
+        </IF>
+      </METHOD>
+
+      <!-- Freibeträge für Versorgungsbezüge, Altersentlastungsbetrag (§ 39b Absatz 2 Satz 3 EStG), PAP Seite 16 -->
+      <METHOD name="MRE4">
+        <IF expr="ZVBEZJ.compareTo (BigDecimal.ZERO) == 0">
+          <THEN>
+            <EVAL exec="FVBZ= BigDecimal.ZERO"/>
+            <EVAL exec="FVB= BigDecimal.ZERO"/>
+            <EVAL exec="FVBZSO= BigDecimal.ZERO"/>
+            <EVAL exec="FVBSO= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+            <IF expr="VJAHR &lt; 2006">
+              <THEN>
+                <EVAL exec="J= 1"/>
+              </THEN>
+              <ELSE>
+                <IF expr="VJAHR &lt; 2058"> 
+                  <THEN>
+                    <EVAL exec="J= VJAHR - 2004"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="J= 54"/> 
+                  </ELSE>
+                </IF>
+              </ELSE>
+            </IF>
+            <IF expr="LZZ == 1">
+              <THEN>
+                <EVAL exec="VBEZB= (VBEZM.multiply (BigDecimal.valueOf(ZMVB))).add (VBEZS)"/>
+                <EVAL exec="HFVB= TAB2[J].divide (ZAHL12).multiply (BigDecimal.valueOf(ZMVB)).setScale (0, BigDecimal.ROUND_UP)"/> 
+                <EVAL exec="FVBZ= TAB3[J].divide (ZAHL12).multiply (BigDecimal.valueOf(ZMVB)).setScale (0, BigDecimal.ROUND_UP)"/>
+              </THEN> 
+              <ELSE>
+                <EVAL exec="VBEZB= ((VBEZM.multiply (ZAHL12)).add (VBEZS)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+                <EVAL exec="HFVB= TAB2[J]"/>
+                <EVAL exec="FVBZ= TAB3[J]"/>
+              </ELSE>
+            </IF>
+            <EVAL exec="FVB= ((VBEZB.multiply (TAB1[J]))).divide (ZAHL100).setScale (2, BigDecimal.ROUND_UP)"/>
+            <IF expr="FVB.compareTo (HFVB) == 1">
+              <THEN>
+                <EVAL exec="FVB = HFVB"/>
+              </THEN>
+            </IF>
+            
+            <IF expr="FVB.compareTo (ZVBEZJ) == 1">
+              <THEN>
+                <EVAL exec="FVB = ZVBEZJ"/>
+              </THEN>
+            </IF>
+            
+            <EVAL exec="FVBSO= (FVB.add((VBEZBSO.multiply (TAB1[J])).divide (ZAHL100))).setScale (2, BigDecimal.ROUND_UP)"/>
+            <IF expr="FVBSO.compareTo (TAB2[J]) == 1">
+              <THEN>
+                <EVAL exec="FVBSO = TAB2[J]"/>
+              </THEN> 
+            </IF>
+            <EVAL exec="HFVBZSO= (((VBEZB.add(VBEZBSO)).divide (ZAHL100)).subtract (FVBSO)).setScale (2, BigDecimal.ROUND_DOWN)"/>        
+            <EVAL exec="FVBZSO= (FVBZ.add((VBEZBSO).divide (ZAHL100))).setScale (0, BigDecimal.ROUND_UP)"/>
+            <IF expr="FVBZSO.compareTo (HFVBZSO) == 1">
+              <THEN>
+                <EVAL exec="FVBZSO = HFVBZSO.setScale(0, BigDecimal.ROUND_UP)"/>
+              </THEN>
+            </IF>
+            <IF expr="FVBZSO.compareTo (TAB3[J]) == 1">
+              <THEN>
+                <EVAL exec="FVBZSO = TAB3[J]"/>
+              </THEN>
+            </IF> 
+            <EVAL exec="HFVBZ= ((VBEZB.divide (ZAHL100)).subtract (FVB)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+            <IF expr="FVBZ.compareTo (HFVBZ) == 1">
+              <THEN>
+                <EVAL exec="FVBZ = HFVBZ.setScale (0, BigDecimal.ROUND_UP)"/>
+              </THEN>
+            </IF>
+          </ELSE>
+        </IF>
+        <EXECUTE method="MRE4ALTE"/>
+      </METHOD>
+
+      <!-- Altersentlastungsbetrag (§ 39b Absatz 2 Satz 3 EStG), PAP Seite 17 -->
+      <METHOD name="MRE4ALTE">
+        <IF expr="ALTER1 == 0">
+          <THEN>
+            <EVAL exec="ALTE= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+            <IF expr="AJAHR &lt; 2006">
+              <THEN>
+                <EVAL exec="K= 1"/>
+              </THEN>
+              <ELSE>
+                <IF expr="AJAHR &lt; 2058"> 
+                  <THEN>
+                    <EVAL exec="K= AJAHR - 2004"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="K= 54"/> 
+                  </ELSE>
+                </IF>
+              </ELSE>
+            </IF>
+            <EVAL exec="BMG= ZRE4J.subtract (ZVBEZJ)"/>
+            
+            <EVAL exec="ALTE = (BMG.multiply(TAB4[K])).setScale(0, BigDecimal.ROUND_UP)"/>
+            
+            <EVAL exec="HBALTE= TAB5[K]"/>
+            <IF expr="ALTE.compareTo (HBALTE) == 1">
+              <THEN>
+                <EVAL exec="ALTE= HBALTE"/>
+              </THEN>
+            </IF>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Ermittlung des Jahresarbeitslohns nach Abzug der Freibeträge nach § 39 b Absatz 2 Satz 3 und 4 EStG, PAP Seite 20 -->
+      <METHOD name="MRE4ABZ"> 
+      	<EVAL exec="ZRE4= (ZRE4J.subtract (FVB).subtract   (ALTE).subtract (JLFREIB).add (JLHINZU)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+      	<IF expr="ZRE4.compareTo (BigDecimal.ZERO) == -1"> 
+      		<THEN> 
+      			<EVAL exec="ZRE4= BigDecimal.ZERO"/> 
+      		</THEN> 
+      	</IF> 
+      	<EVAL exec="ZRE4VP= ZRE4J"/>
+
+        <EVAL exec="ZVBEZ = ZVBEZJ.subtract(FVB).setScale(2, BigDecimal.ROUND_DOWN)"/>
+
+        <IF expr="ZVBEZ.compareTo(BigDecimal.ZERO) == -1"> 
+        	<THEN> 
+        		<EVAL exec="ZVBEZ = BigDecimal.ZERO"/> 
+        	</THEN> 
+        </IF> 
+      </METHOD>
+
+      <!-- Berechnung fuer laufende Lohnzahlungszeitraueme Seite 21-->
+      <METHOD name="MBERECH"> 
+
+        <EXECUTE method="MZTABFB"/> 
+        
+        <EVAL exec="VFRB = ((ANP.add(FVB.add(FVBZ))).multiply(ZAHL100)).setScale(0, BigDecimal.ROUND_DOWN)"/>
+        
+        <EXECUTE method="MLSTJAHR"/>
+        
+        <EVAL exec="WVFRB = ((ZVE.subtract(GFB)).multiply(ZAHL100)).setScale(0, BigDecimal.ROUND_DOWN)"/> 
+        
+        <IF expr="WVFRB.compareTo(BigDecimal.ZERO) == -1">
+        	<THEN> 
+        		<EVAL exec="WVFRB = BigDecimal.ZERO"/> 
+        	</THEN> 
+        </IF> 
+           
+    	<EVAL exec="LSTJAHR = (ST.multiply(BigDecimal.valueOf(f))).setScale(0,BigDecimal.ROUND_DOWN)"/> 
+    	
+    	<EXECUTE method="UPLSTLZZ"/>
+    		   	
+    	 <IF expr="ZKF.compareTo(BigDecimal.ZERO) == 1">
+    	    <THEN> 
+    	    	  <EVAL exec="ZTABFB = ZTABFB.add(KFB)"/> 
+    	    	  <EXECUTE method="MRE4ABZ"/>
+    	    	  <EXECUTE method="MLSTJAHR"/>
+    	    	  <EVAL exec="JBMG = (ST.multiply(BigDecimal.valueOf(f))).setScale(0,BigDecimal.ROUND_DOWN)"/> 
+    	    </THEN> 
+    	    <ELSE>
+    	          <EVAL exec="JBMG = LSTJAHR"/> 
+    	    </ELSE>
+    	  </IF> 
+    	  
+    	  <EXECUTE method="MSOLZ"/>
+    	    
+      </METHOD>
+
+      <!-- Ermittlung der festen Tabellenfreibeträge (ohne Vorsorgepauschale), PAP Seite 22 -->
+      <METHOD name="MZTABFB"> 
+        <EVAL exec="ANP= BigDecimal.ZERO"/>
+        <IF expr="ZVBEZ.compareTo (BigDecimal.ZERO) &gt;= 0 &amp;&amp; ZVBEZ.compareTo(FVBZ) == -1">
+          <THEN>
+            <EVAL exec="FVBZ = BigDecimal.valueOf(ZVBEZ.longValue())"/>
+          </THEN>
+        </IF>
+        <IF expr="STKL &lt; 6">
+          <THEN>
+            <IF expr="ZVBEZ.compareTo (BigDecimal.ZERO) == 1">
+              <THEN>
+                <IF expr="(ZVBEZ.subtract (FVBZ)).compareTo (BigDecimal.valueOf(102)) == -1">
+                  <THEN>
+                    <EVAL exec="ANP= (ZVBEZ.subtract (FVBZ)).setScale (0, BigDecimal.ROUND_UP)"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="ANP= BigDecimal.valueOf(102)"/>
+                  </ELSE>
+                </IF>
+              </THEN>
+            </IF>
+          </THEN>
+          <ELSE>
+          	<EVAL exec="FVBZ= BigDecimal.ZERO"/>
+          	<EVAL exec="FVBZSO= BigDecimal.ZERO"/>
+          </ELSE>
+        </IF>
+        <IF expr="STKL &lt; 6">
+          <THEN>
+          	<IF expr="ZRE4.compareTo(ZVBEZ) == 1">
+            	<THEN>
+    	        	<IF expr="ZRE4.subtract(ZVBEZ).compareTo(BigDecimal.valueOf(1230)) == -1"> 
+    		        	<THEN>
+    		        		<EVAL exec="ANP = ANP.add(ZRE4).subtract(ZVBEZ).setScale(0,BigDecimal.ROUND_UP)"/>
+    		        	</THEN>
+    	        		<ELSE>
+    	        			<EVAL exec="ANP = ANP.add(BigDecimal.valueOf(1230))"/> 
+    	        		</ELSE>
+    	        	</IF>
+            	</THEN>
+            </IF>
+          </THEN>
+        </IF>
+        <EVAL exec="KZTAB= 1"/>
+        <IF expr="STKL == 1">
+          <THEN>
+            <EVAL exec="SAP= BigDecimal.valueOf(36)"/>
+            <EVAL exec="KFB= (ZKF.multiply (BigDecimal.valueOf(9756))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+          </THEN>
+    	  <ELSE>
+    			<IF expr="STKL == 2">
+    			    <THEN>
+    			        <EVAL exec="EFA= BigDecimal.valueOf(4260)"/> 
+    			        <EVAL exec="SAP= BigDecimal.valueOf(36)"/>
+    			        <EVAL exec="KFB= (ZKF.multiply (BigDecimal.valueOf(9756))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+    			    </THEN>
+    		 
+    		    	<ELSE>
+    					<IF expr="STKL == 3">
+    					    <THEN>
+    					        <EVAL exec="KZTAB= 2"/>
+    					        <EVAL exec="SAP= BigDecimal.valueOf(36)"/>
+    					        <EVAL exec="KFB= (ZKF.multiply (BigDecimal.valueOf(9756))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+    					    </THEN>
+    					
+    						<ELSE>
+    						  	<IF expr="STKL == 4">
+    						      <THEN>
+    						        <EVAL exec="SAP= BigDecimal.valueOf(36)"/>
+    						        <EVAL exec="KFB= (ZKF.multiply (BigDecimal.valueOf(4878))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+    						      </THEN> 
+    								
+    							  <ELSE>
+    								  	<IF expr="STKL == 5">
+    								      <THEN>
+    								        <EVAL exec="SAP= BigDecimal.valueOf(36)"/>
+    								        <EVAL exec="KFB= BigDecimal.ZERO"/>
+    								      </THEN> 
+    										
+    									  <ELSE>
+    								        <EVAL exec="KFB= BigDecimal.ZERO"/>
+    									  </ELSE>
+    									</IF>
+    							 </ELSE>
+    							</IF>
+    						</ELSE>	
+    					</IF>  	
+    				</ELSE>	
+    			</IF>	
+    		</ELSE>	
+        </IF>
+        <EVAL exec="ZTABFB= (EFA.add (ANP).add (SAP).add (FVBZ)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+      </METHOD>
+
+      <!-- Ermittlung Jahreslohnsteuer, PAP Seite 23 -->
+      <METHOD name="MLSTJAHR">
+         <EXECUTE method="UPEVP"/>
+
+         <EVAL exec="ZVE= ZRE4.subtract (ZTABFB).subtract(VSP)"/> 
+
+         <EXECUTE method="UPMLST"/>
+      </METHOD>
+        
+      <!-- PAP Seite 24 -->
+       <METHOD name="UPLSTLZZ">
+       	  <EVAL exec="JW = LSTJAHR.multiply(ZAHL100)"/>  
+    	  <EXECUTE method="UPANTEIL"/>
+    	  <EVAL exec="LSTLZZ = ANTEIL1"/>
+       </METHOD>
+    	
+      <!-- PAP Seite 25 -->
+      <METHOD name="UPMLST">
+    	<IF expr="ZVE.compareTo (ZAHL1) == -1">
+          <THEN>
+            <EVAL exec="ZVE= BigDecimal.ZERO"/>
+            <EVAL exec="X= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+            <EVAL exec="X= (ZVE.divide (BigDecimal.valueOf(KZTAB))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+          </ELSE>
+        </IF>
+    	<IF expr="STKL &lt; 5">
+          <THEN>
+          	 <EXECUTE method="UPTAB26"/> 
+          </THEN>
+          <ELSE>
+            <EXECUTE method="MST5_6"/>
+          </ELSE>
+        </IF>
+      </METHOD>	  
+
+      <!-- 	Vorsorgepauschale (§ 39b Absatz 2 Satz 5 Nummer 3 EStG) PAP Seite 26  -->
+      <METHOD name="UPEVP">
+        <IF expr="KRV == 1">
+          <THEN>
+            <EVAL exec="VSPR = BigDecimal.ZERO"/>
+          </THEN>
+    		<ELSE>  
+    		    <IF expr="ZRE4VP.compareTo(BBGRVALV) == 1">
+          			<THEN>
+          				<EVAL exec="ZRE4VPR = BBGRVALV"/>
+          			</THEN>
+          			<ELSE>
+          				<EVAL exec="ZRE4VPR = ZRE4VP"/>
+          			</ELSE>
+          		</IF>
+          		<EVAL exec="VSPR = (ZRE4VPR.multiply(RVSATZAN)).setScale(2,BigDecimal.ROUND_DOWN)"/>
+    	    </ELSE>
+        </IF>
+
+        <EXECUTE method="MVSPKVPV"/>
+        
+        <IF expr="ALV == 1">
+          <THEN>
+            <!-- NOP -->
+          </THEN>
+          <ELSE>
+              <IF expr="STKL == 6">
+              	<THEN>
+              		<!-- NOP -->
+              	</THEN>
+              	<ELSE>
+              		<EXECUTE method="MVSPHB"/>
+              	</ELSE>
+              </IF>
+          </ELSE>
+        </IF>
+      </METHOD>
+     
+      <!-- Vorsorgepauschale (§ 39b Absatz 2 Satz 5 Nummer 3 Buchstaben b bis d EStG), PAP Seite 27 -->
+      <METHOD name="MVSPKVPV">
+      	<IF expr="ZRE4VP.compareTo(BBGKVPV) == 1">
+        	<THEN>
+    	  		<EVAL exec="ZRE4VPR = BBGKVPV"/>
+    	  	</THEN>
+    	  	<ELSE>
+    	  		<EVAL exec="ZRE4VPR = ZRE4VP"/>
+    	  	</ELSE>
+        </IF>
+
+        <IF expr="PKV &gt; 0">
+        	<THEN>
+    			<IF expr="STKL == 6">
+    	      		<THEN>
+    					<EVAL exec="VSPKVPV = BigDecimal.ZERO"/>
+    		  		</THEN>
+    		  		<ELSE>
+    	    			<EVAL exec="PKPVAGZJ = PKPVAGZ.multiply(ZAHL12).divide(ZAHL100).setScale(2,BigDecimal.ROUND_DOWN)"/>
+    	    			<EVAL exec="VSPKVPV = PKPV.multiply(ZAHL12).divide(ZAHL100).setScale(2, BigDecimal.ROUND_DOWN)"/>
+    	    			<EVAL exec="VSPKVPV = VSPKVPV.subtract(PKPVAGZJ)"/>
+    	    			
+    					<IF expr="VSPKVPV.compareTo(BigDecimal.ZERO) == -1">
+    						<THEN>
+    							<EVAL exec="VSPKVPV = BigDecimal.ZERO"/>
+    						</THEN>	    		
+    					</IF>
+    		  		</ELSE>
+    			</IF>
+    		</THEN>
+    	   	<ELSE>
+    			<EVAL exec="VSPKVPV = ZRE4VPR.multiply(KVSATZAN.add(PVSATZAN)).setScale(2, BigDecimal.ROUND_DOWN)"/>
+    	   	</ELSE>
+    	</IF>
+    	
+    	<EVAL exec="VSP = VSPKVPV.add(VSPR).setScale(0, BigDecimal.ROUND_UP)"/>
+    	
+      </METHOD>
+
+      <!-- Höchstbetragsberechnung zur Arbeitslosenversicherung (§ 39b Absatz 2 Satz 5 Nummer 3 Buchstabe e EStG), PAP Seite 28  -->	
+      <METHOD name="MVSPHB">
+      	
+      	<IF expr="ZRE4VP.compareTo(BBGRVALV) == 1">
+        	<THEN>
+    	  		<EVAL exec="ZRE4VPR = BBGRVALV"/>
+    	  	</THEN>
+    	  	<ELSE>
+    	  		<EVAL exec="ZRE4VPR = ZRE4VP"/>
+    	  	</ELSE>
+        </IF>
+        
+        <EVAL exec="VSPALV = AVSATZAN.multiply(ZRE4VPR).setScale(2, BigDecimal.ROUND_DOWN)"/>
+        
+        <EVAL exec="VSPHB = VSPALV.add(VSPKVPV).setScale(2, BigDecimal.ROUND_DOWN)"/>
+        
+        <IF expr="VSPHB.compareTo(BigDecimal.valueOf(1900)) == 1">
+        	<THEN>
+    	  		<EVAL exec="VSPHB = BigDecimal.valueOf(1900)"/>
+    	  	</THEN>
+        </IF>
+        
+        <EVAL exec="VSPN = VSPR.add(VSPHB).setScale(0, BigDecimal.ROUND_UP)"/>
+        
+        <IF expr="VSPN.compareTo(VSP) == 1">
+        	<THEN>
+    	  		<EVAL exec="VSP = VSPN"/>
+    	  	</THEN>
+        </IF>
+        
+      </METHOD>
+      
+      <!-- Lohnsteuer fuer die Steuerklassen V und VI (§ 39b Absatz 2 Satz 7 EStG), PAP Seite 29 -->
+      <METHOD name="MST5_6">
+        <EVAL exec="ZZX= X"/>
+        <IF expr="ZZX.compareTo(W2STKL5) == 1">
+          <THEN>
+            <EVAL exec="ZX= W2STKL5"/>
+            <EXECUTE method="UP5_6"/>
+    	    <IF expr="ZZX.compareTo (W3STKL5) == 1">
+    	      <THEN>
+                <EVAL exec="ST= (ST.add ((W3STKL5.subtract (W2STKL5)).multiply (BigDecimal.valueOf(0.42)))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+                <EVAL exec="ST= (ST.add ((ZZX.subtract (W3STKL5)).multiply (BigDecimal.valueOf(0.45)))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+              </THEN>
+              <ELSE>
+                <EVAL exec="ST= (ST.add ((ZZX.subtract (W2STKL5)).multiply (BigDecimal.valueOf(0.42)))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+              </ELSE>
+            </IF>
+          </THEN>
+          <ELSE>
+            <EVAL exec="ZX= ZZX"/>
+            <EXECUTE method="UP5_6"/>
+            <IF expr="ZZX.compareTo (W1STKL5) == 1"> 
+              <THEN>
+                <EVAL exec="VERGL= ST"/>
+                <EVAL exec="ZX= W1STKL5"/> 
+                <EXECUTE method="UP5_6"/>
+                <EVAL exec="HOCH= (ST.add ((ZZX.subtract (W1STKL5)).multiply (BigDecimal.valueOf(0.42)))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+                <IF expr="HOCH.compareTo (VERGL) == -1">
+                  <THEN>
+                    <EVAL exec="ST= HOCH"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="ST= VERGL"/>
+                  </ELSE>
+                </IF>
+              </THEN>
+            </IF>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Unterprogramm zur Lohnsteuer fuer die Steuerklassen V und VI (§ 39b Absatz 2 Satz 7 EStG), PAP Seite 30 -->
+      <METHOD name="UP5_6">
+        <EVAL exec="X= (ZX.multiply (BigDecimal.valueOf(1.25))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+        
+       	<EXECUTE method="UPTAB26"/> 
+        
+        <EVAL exec="ST1= ST"/>
+        <EVAL exec="X= (ZX.multiply (BigDecimal.valueOf(0.75))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+        
+       	<EXECUTE method="UPTAB26"/> 
+        
+        <EVAL exec="ST2= ST"/>
+        <EVAL exec="DIFF= (ST1.subtract (ST2)).multiply (ZAHL2)"/>
+        <EVAL exec="MIST= (ZX.multiply (BigDecimal.valueOf(0.14))).setScale (0, BigDecimal.ROUND_DOWN)"/>
+        <IF expr="MIST.compareTo (DIFF) == 1">
+          <THEN>
+            <EVAL exec="ST= MIST"/>
+          </THEN>
+          <ELSE>
+            <EVAL exec="ST= DIFF"/>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Solidaritätszuschlag, PAP Seite 31 -->
+      <METHOD name="MSOLZ">
+        <EVAL exec="SOLZFREI = (SOLZFREI.multiply(BigDecimal.valueOf(KZTAB)))"/> 
+        <IF expr="JBMG.compareTo (SOLZFREI) == 1">
+          <THEN>
+            <EVAL exec="SOLZJ= (JBMG.multiply (BigDecimal.valueOf(5.5))).divide(ZAHL100).setScale(2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="SOLZMIN= (JBMG.subtract (SOLZFREI)).multiply (BigDecimal.valueOf(11.9)).divide (ZAHL100).setScale (2, BigDecimal.ROUND_DOWN)"/> 
+            <IF expr="SOLZMIN.compareTo (SOLZJ) == -1">
+              <THEN>
+                <EVAL exec="SOLZJ= SOLZMIN"/>
+              </THEN>
+            </IF>
+            <EVAL exec="JW= SOLZJ.multiply (ZAHL100).setScale (0, BigDecimal.ROUND_DOWN)"/>
+                    
+            <EXECUTE method="UPANTEIL"/>
+            
+            <EVAL exec="SOLZLZZ= ANTEIL1"/>
+          </THEN>
+          <ELSE>
+            <EVAL exec="SOLZLZZ= BigDecimal.ZERO"/>
+          </ELSE>
+        </IF>
+        <IF expr="R &gt; 0">
+          <THEN>
+            <EVAL exec="JW= JBMG.multiply (ZAHL100)"/>        
+            
+            <EXECUTE method="UPANTEIL"/>
+            <EVAL exec="BK= ANTEIL1"/>
+          </THEN>
+          <ELSE>
+            <EVAL exec="BK= BigDecimal.ZERO"/>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Anteil von Jahresbeträgen fuer einen LZZ (§ 39b Absatz 2 Satz 9 EStG), PAP Seite 32 -->
+      <METHOD name="UPANTEIL">
+        <IF expr="LZZ == 1">
+          <THEN>
+            <EVAL exec="ANTEIL1= JW"/>
+          </THEN>
+          <ELSE>
+            <IF expr="LZZ == 2">
+              <THEN>
+                <EVAL exec="ANTEIL1= JW.divide (ZAHL12, 0, BigDecimal.ROUND_DOWN)"/>
+              </THEN>
+              <ELSE>
+                <IF expr="LZZ == 3">
+                  <THEN> 
+                    <EVAL exec="ANTEIL1= (JW.multiply (ZAHL7)).divide (ZAHL360, 0, BigDecimal.ROUND_DOWN)"/>
+                  </THEN>
+                  <ELSE>
+                    <EVAL exec="ANTEIL1= JW.divide (ZAHL360, 0, BigDecimal.ROUND_DOWN)"/>
+                  </ELSE>
+                </IF>
+              </ELSE>
+            </IF>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Berechnung sonstiger Bezüge nach § 39b Absatz 3 Sätze 1 bis 8 EStG, PAP Seite 33 -->
+      <METHOD name="MSONST">
+      
+        <EVAL exec="LZZ = 1"/>
+        
+        <IF expr="ZMVB == 0">
+          <THEN>
+            <EVAL exec="ZMVB = 12"/>
+          </THEN>
+        </IF>
+        
+        <IF expr="SONSTB.compareTo (BigDecimal.ZERO) == 0 &amp;&amp; MBV.compareTo (BigDecimal.ZERO) == 0">
+          <THEN>
+            <EVAL exec="LSTSO= BigDecimal.ZERO"/>
+            <EVAL exec="STS= BigDecimal.ZERO"/>
+            <EVAL exec="SOLZS= BigDecimal.ZERO"/>
+            <EVAL exec="BKS= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+            <EXECUTE method="MOSONST"/>
+            <EVAL exec="ZRE4J= ((JRE4.add (SONSTB)).divide (ZAHL100)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="ZVBEZJ= ((JVBEZ.add (VBS)).divide (ZAHL100)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+            <EVAL exec="VBEZBSO= STERBE"/>
+            <EXECUTE method="MRE4SONST"/>
+            <EXECUTE method="MLSTJAHR"/>
+            
+             <EVAL exec="WVFRBM = (ZVE.subtract(GFB)).multiply(ZAHL100).setScale(2,BigDecimal.ROUND_DOWN)"/>
+             <IF expr="WVFRBM.compareTo(BigDecimal.ZERO) == -1"> <!-- WVFRBM < 0 -->
+              <THEN>
+                <EVAL exec="WVFRBM = BigDecimal.ZERO"/>
+              </THEN>
+            </IF>
+            
+            <EVAL exec="LSTSO= ST.multiply (ZAHL100)"/>
+            
+    		<!-- lt. PAP:  "Hinweis: negative Zahlen werden nach ihrem Betrag gerundet!" --> 
+            <!-- Fallunterscheidung bzgl. negativer Zahlen nicht nötig, da die Java-Klasse BigDecimal.ROUND_DOWN  -->
+            <!-- die Ziffer und nicht die Zahl abrundet, also aus -4.5 wird -4 und aus 4.5 wird 4 -->
+            <EVAL exec="STS = LSTSO.subtract(LSTOSO).multiply(BigDecimal.valueOf(f)).divide(ZAHL100, 0, BigDecimal.ROUND_DOWN).multiply(ZAHL100)"/>
+            
+            <EXECUTE method="STSMIN"/> 
+            
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- PAP Seite 34 -->
+      <METHOD name="STSMIN">
+      
+    	<IF expr = "STS.compareTo(BigDecimal.ZERO) == -1">
+    	    <THEN>			
+    			<IF expr = "MBV.compareTo(BigDecimal.ZERO) == 0" >
+    				<THEN>
+    				    <!-- NOP -->
+    				</THEN>
+    				 		
+    				<ELSE>					
+    					<EVAL exec = "LSTLZZ = LSTLZZ.add(STS)"/>			
+    					
+    					<IF expr = "LSTLZZ.compareTo(BigDecimal.ZERO) == -1">				
+     						<THEN>
+    							<EVAL exec = "LSTLZZ = BigDecimal.ZERO" />
+    						</THEN>
+    					</IF>
+    					
+    					<EVAL exec = "SOLZLZZ = SOLZLZZ.add(STS.multiply(BigDecimal.valueOf(5.5).divide(ZAHL100))).setScale(0, BigDecimal.ROUND_DOWN)"/>
+    				    
+    					<IF expr = "SOLZLZZ.compareTo(BigDecimal.ZERO) == -1"> 
+    						<THEN>
+    							<EVAL exec = "SOLZLZZ = BigDecimal.ZERO" />
+    						</THEN>
+    				    </IF>
+
+    					<EVAL exec = "BK = BK.add(STS)" />
+    					
+    					<IF expr = "BK.compareTo(BigDecimal.ZERO) == -1"> 
+    						<THEN>
+    							<EVAL exec = "BK = BigDecimal.ZERO" />
+    				    	</THEN>
+    				    </IF>
+    				</ELSE>		
+    			</IF>		
+
+    			<EVAL exec = "STS = BigDecimal.ZERO" /> 
+    			<EVAL exec = "SOLZS = BigDecimal.ZERO" />
+
+    		</THEN>
+    				
+    		<ELSE>
+    		
+    			<EXECUTE method = "MSOLZSTS" />				
+
+    		</ELSE>
+    	</IF>
+    			
+    	<IF expr = "R &gt; 0">
+    		<THEN>
+    			<EVAL exec = "BKS = STS" /> 
+    		</THEN>
+    		<ELSE>
+    			<EVAL exec = "BKS = BigDecimal.ZERO" />
+    		</ELSE>			
+        </IF>
+        
+      </METHOD>	
+
+
+      
+      <!-- Berechnung des SolZ auf sonstige Bezüge, PAP Seite 35 -->
+      <METHOD name="MSOLZSTS">
+        <IF expr="ZKF.compareTo(BigDecimal.ZERO) == 1">
+          <THEN>
+            <EVAL exec="SOLZSZVE= ZVE.subtract(KFB)"/>
+          </THEN>
+          <ELSE>
+          	<EVAL exec="SOLZSZVE= ZVE"/>
+          </ELSE>
+        </IF>
+        <IF expr="SOLZSZVE.compareTo(BigDecimal.ONE) == -1">
+          <THEN>
+            <EVAL exec="SOLZSZVE= BigDecimal.ZERO"/>
+            <EVAL exec="X= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+          	<EVAL exec="X= SOLZSZVE.divide(BigDecimal.valueOf(KZTAB), 0, BigDecimal.ROUND_DOWN)"/>
+          </ELSE>
+        </IF>
+        <IF expr="STKL &lt; 5"> 
+          <THEN>
+            <EXECUTE method="UPTAB26"/> 
+          </THEN>
+          <ELSE>
+          	<EXECUTE method="MST5_6"/> 
+          </ELSE>
+        </IF>
+        <EVAL exec="SOLZSBMG= ST.multiply(BigDecimal.valueOf(f)).setScale(0,BigDecimal.ROUND_DOWN)"/>
+        <IF expr="SOLZSBMG.compareTo(SOLZFREI) == 1">
+          <THEN>
+            <EVAL exec="SOLZS= STS.multiply(BigDecimal.valueOf(5.5)).divide(ZAHL100, 0, BigDecimal.ROUND_DOWN)"/>
+          </THEN>
+          <ELSE>
+          	<EVAL exec="SOLZS= BigDecimal.ZERO"/>
+          </ELSE>
+        </IF>
+      </METHOD>
+
+      <!-- Sonderberechnung ohne sonstige Bezüge für Berechnung bei sonstigen Bezügen, PAP Seite 36 -->
+      <METHOD name="MOSONST">
+        <EVAL exec="ZRE4J= (JRE4.divide (ZAHL100)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+        <EVAL exec="ZVBEZJ= (JVBEZ.divide (ZAHL100)).setScale (2, BigDecimal.ROUND_DOWN)"/>
+        <EVAL exec="JLFREIB= JFREIB.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+        <EVAL exec="JLHINZU= JHINZU.divide (ZAHL100, 2, BigDecimal.ROUND_DOWN)"/>
+        <EXECUTE method="MRE4"/>
+        <EXECUTE method="MRE4ABZ"/>
+        <EVAL exec="ZRE4VP = ZRE4VP.subtract(JRE4ENT.divide(ZAHL100))"/>
+        <EXECUTE method="MZTABFB"/> 
+        <EVAL exec="VFRBS1 = ((ANP.add(FVB.add(FVBZ))).multiply(ZAHL100)).setScale(2,BigDecimal.ROUND_DOWN)"/>
+        <EXECUTE method="MLSTJAHR"/>
+        
+         <EVAL exec="WVFRBO = ((ZVE.subtract(GFB)).multiply(ZAHL100)).setScale(2, BigDecimal.ROUND_DOWN)"/>
+         <IF expr="WVFRBO.compareTo(BigDecimal.ZERO) == -1 ">
+    	     <THEN>
+    	            <EVAL exec="WVFRBO = BigDecimal.ZERO"/>
+    	     </THEN>
+         </IF>
+        
+        <EVAL exec="LSTOSO= ST.multiply (ZAHL100)"/>
+      </METHOD>
+
+      <!-- Sonderberechnung mit sonstigen Bezüge für Berechnung bei sonstigen Bezügen, PAP Seite 37 -->
+      <METHOD name="MRE4SONST">
+        <EXECUTE method="MRE4"/>
+        <EVAL exec="FVB= FVBSO"/>
+        <EXECUTE method="MRE4ABZ"/>
+        <EVAL exec="ZRE4VP = ZRE4VP.add(MBV.divide(ZAHL100)).subtract(JRE4ENT.divide(ZAHL100)).subtract(SONSTENT.divide(ZAHL100))"/>
+        <EVAL exec="FVBZ= FVBZSO"/>
+        <EXECUTE method="MZTABFB"/> 
+        <EVAL exec="VFRBS2 = ((((ANP.add(FVB).add(FVBZ))).multiply(ZAHL100))).subtract(VFRBS1)"/>
+      </METHOD>
+      
+
+      <!-- Tarifliche Einkommensteuer §32a EStG, PAP Seite 38 -->
+    <METHOD name="UPTAB26"> 
+        <IF expr="X.compareTo(GFB.add(ZAHL1)) == -1"> 
+          <THEN>
+            <EVAL exec="ST= BigDecimal.ZERO"/>
+          </THEN>
+          <ELSE>
+            <IF expr="X.compareTo (BigDecimal.valueOf(17800)) == -1"> 
+              <THEN>
+                <EVAL exec="Y = (X.subtract(GFB)).divide(ZAHL10000, 6,BigDecimal.ROUND_DOWN)"/> 
+                <EVAL exec="RW= Y.multiply (BigDecimal.valueOf(914.51))"/> 
+                <EVAL exec="RW= RW.add (BigDecimal.valueOf(1400))"/>
+                <EVAL exec="ST= (RW.multiply (Y)).setScale (0, BigDecimal.ROUND_DOWN)"/>
+              </THEN>
+              <ELSE>
+                <IF expr="X.compareTo (BigDecimal.valueOf(69879)) == -1"> 
+                  <THEN>
+                    <EVAL exec="Y= (X.subtract (BigDecimal.valueOf(17799))).divide (ZAHL10000, 6, BigDecimal.ROUND_DOWN)"/> 
+                    <EVAL exec="RW= Y.multiply (BigDecimal.valueOf(173.1))"/> 
+                    <EVAL exec="RW= RW.add (BigDecimal.valueOf(2397))"/>
+                    <EVAL exec="RW= RW.multiply (Y)"/>
+                    <EVAL exec="ST= (RW.add (BigDecimal.valueOf(1034.87))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+                  </THEN>
+                  <ELSE>
+    	            <IF expr="X.compareTo (BigDecimal.valueOf(277826)) == -1">
+    	              <THEN>
+                        <EVAL exec="ST= ((X.multiply (BigDecimal.valueOf(0.42))).subtract (BigDecimal.valueOf(11135.63))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+                      </THEN>
+                      <ELSE>
+                        <EVAL exec="ST= ((X.multiply (BigDecimal.valueOf(0.45))).subtract (BigDecimal.valueOf(19470.38))).setScale (0, BigDecimal.ROUND_DOWN)"/> 
+                      </ELSE>
+                    </IF>
+                  </ELSE>
+                </IF>
+              </ELSE>
+            </IF>
+          </ELSE>
+        </IF>
+        <EVAL exec="ST= ST.multiply (BigDecimal.valueOf(KZTAB))"/>
+      </METHOD>
+    </METHODS>
+    </PAP>`;
+    const PAP_2026 = compilePap(PAP_XML_2026);
+    // ===== End of inlined PAP =====
+
+    const BUNDESLAND_KSTRATE = {
+      BW: 0.08, BY: 0.08,
+      BE: 0.09, BB: 0.09, HB: 0.09, HH: 0.09, HE: 0.09,
+      MV: 0.09, NI: 0.09, NW: 0.09, RP: 0.09, SL: 0.09,
+      SN: 0.09, ST: 0.09, SH: 0.09, TH: 0.09,
+    };
+    function calculateLohnsteuer(p) {
+      const kkZusatzPct = (p.kkZusatzbeitrag != null ? p.kkZusatzbeitrag : 0.017) * 100;
+      const inputs = {
+        LZZ: 2, RE4: Math.round((+p.brutto) * 100), STKL: +p.steuerklasse || 1,
+        KVZ: kkZusatzPct, KRV: 0,
+        PVZ: p.kinderlos ? 1 : 0,
+        PVA: +p.pvKinderAbschlag || 0,
+        PVS: p.sachsen ? 1 : 0,
+        R: p.konfession ? 1 : 0,
+        ZKF: 0,
+        af: p.faktor && +p.faktor > 0 && +p.faktor < 1 ? 1 : 0,
+        f: p.faktor && +p.faktor > 0 && +p.faktor < 1 ? +p.faktor : 1.0,
+        AJAHR: 0, PKV: 0, ALV: 0, PKPV: 0, PKPVAGZ: 0,
+        JFREIB: 0, JHINZU: 0,
+        LZZFREIB: Math.round(((+p.freibetragMonatlich) || 0) * 100),
+        LZZHINZU: 0, MBV: 0, SONSTB: 0, STERBE: 0,
+        VBEZ: 0, VBEZM: 0, VBEZS: 0, VBS: 0, VKAPA: 0, VMT: 0,
+        LZZJFREIB: 0, LZZJHINZU: 0, JRE4: 0, JRE4ENT: 0, JVBEZ: 0,
+        ZMVB: 0, VJAHR: 0,
+      };
+      const out = PAP_2026.run(inputs);
+      const lohnsteuer = Math.round(out.LSTLZZ || 0) / 100;
+      const soli = Math.round(out.SOLZLZZ || 0) / 100;
+      const bk = Math.round(out.BK || 0) / 100;
+      const kStRate = p.konfession ? (BUNDESLAND_KSTRATE[p.bundesland] || 0) : 0;
+      const kirchensteuer = Math.round(bk * kStRate * 100) / 100;
+      return { lohnsteuer, soli, kirchensteuer, steuerBrutto: +p.brutto };
     }
     // ===== End of inlined lohnsteuer.mjs =====
 
