@@ -401,6 +401,34 @@
       gap: 4px;
       margin-bottom: 4px;
     }
+
+    @page { size: A4 portrait; margin: 10mm; }
+
+    @media print {
+      html, body { background: #fff; }
+      .app {
+        display: block;
+        padding: 0;
+        gap: 0;
+      }
+      .form-panel { display: none !important; }
+      .slip {
+        width: auto;
+        min-height: auto;
+        box-shadow: none;
+        padding: 0;
+      }
+      .slip,
+      .slip .meta-grid,
+      .slip table.brutto,
+      .slip table.ssv,
+      .slip .verdienst-block,
+      .slip .footer-row,
+      .slip .footnotes {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+    }
   </style>
 </head>
 <body>
@@ -721,6 +749,8 @@
       if (input == null) return null;
       const s = String(input).trim();
       if (s === '') return null;
+      // Accept "1.234,56", "1234,56", "1234.56", "-12,34".
+      // Strip thousand separators (.), then convert decimal comma to dot.
       const normalized = s.replace(/\./g, '').replace(',', '.');
       const n = Number(normalized);
       return Number.isFinite(n) ? n : null;
