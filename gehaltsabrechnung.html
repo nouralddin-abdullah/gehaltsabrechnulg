@@ -93,6 +93,60 @@
       display: grid;
       grid-template-columns: var(--cols, repeat(11, 1fr));
     }
+
+    .slip .employer-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 4mm;
+      margin: 3mm 0 2mm 0;
+      font-size: 7pt;
+      color: #222;
+    }
+    .slip .employer-row .pers-box {
+      border: 1px solid var(--slip-rule);
+      padding: 0.6mm 1.5mm;
+      font-family: var(--mono);
+      font-size: 7pt;
+      line-height: 1.2;
+      text-align: left;
+    }
+    .slip .employer-row .bn-box {
+      border: 1px solid var(--slip-rule);
+      padding: 0.6mm 1.5mm;
+      font-family: var(--mono);
+      font-size: 7pt;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .slip .address-and-hinweise {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm;
+      margin: 4mm 0 6mm 0;
+    }
+    .slip .address {
+      font-family: var(--mono);
+      font-size: 10pt;
+      line-height: 1.35;
+      white-space: pre-line;
+      font-style: normal;
+    }
+    .slip .hinweise {
+      border-top: 1px solid var(--slip-rule);
+      padding-top: 1.5mm;
+    }
+    .slip .hinweise .heading {
+      font-size: 8pt;
+      font-weight: 700;
+      margin-bottom: 1mm;
+    }
+    .slip .hinweise .body {
+      font-size: 8pt;
+      white-space: pre-wrap;
+      min-height: 12mm;
+    }
   </style>
 </head>
 <body>
@@ -110,6 +164,20 @@
       </header>
 
       <div class="meta-grid" id="metaGrid"></div>
+
+      <div class="employer-row">
+        <div class="employer-line" id="employerLine"></div>
+        <div class="pers-box" id="persBox"></div>
+        <div class="bn-box" id="bnBox"></div>
+      </div>
+
+      <div class="address-and-hinweise">
+        <address class="address" id="address"></address>
+        <div class="hinweise">
+          <div class="heading">Hinweise zur Abrechnung</div>
+          <div class="body" id="hinweiseBody"></div>
+        </div>
+      </div>
     </section>
   </div>
   <script>
@@ -324,8 +392,22 @@
       }
     }
 
+    function renderEmployerAndAddress() {
+      document.getElementById('employerLine').textContent = state.firma;
+      const m = state.meta;
+      document.getElementById('persBox').innerHTML =
+        `*Pers.-Nr. ${m.persNrBox}*<br>*Abt.-Nr. ${m.abtNr}*`;
+      document.getElementById('bnBox').innerHTML =
+        `${m.bn}<br>${m.rocCode}<br>${m.mandantBox}`;
+      const a = state.mitarbeiter;
+      document.getElementById('address').textContent =
+        `${a.name}\n${a.strasse}\n${a.plzOrt}`;
+      document.getElementById('hinweiseBody').textContent = state.hinweiseZurAbrechnung;
+    }
+
     function render() {
       renderMeta();
+      renderEmployerAndAddress();
     }
 
     document.addEventListener('DOMContentLoaded', render);
