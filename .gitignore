@@ -4,3 +4,5 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+.playwright-mcp/
+slip-preview*.png

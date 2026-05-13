@@ -298,13 +298,14 @@
 
     .slip .footer-row {
       display: grid;
-      grid-template-columns: 1.4fr 0.6fr 0.8fr 0.8fr 0.8fr auto;
+      grid-template-columns: 2.2fr 0.5fr 0.7fr 0.7fr 0.7fr auto;
       gap: 3mm;
       align-items: end;
       margin-top: 5mm;
       border-top: 1px solid var(--slip-rule);
       padding-top: 2mm;
     }
+    .slip .footer-row .cell .value { white-space: nowrap; }
     .slip .footer-row .cell .label { font-size: var(--caption-size); display: block; }
     .slip .footer-row .cell .value { font-family: var(--mono); font-size: var(--value-size); }
     .slip .footer-row .auszahlung {
