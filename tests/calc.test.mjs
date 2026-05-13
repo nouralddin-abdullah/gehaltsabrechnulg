@@ -4,6 +4,7 @@ import {
   parseDE, formatDE,
   computeRowBetrag, sumBrutto,
   sumSteuerAbzuege, sumSVAbzuege,
+  computeTotals,
 } from './calc.mjs';
 
 test('test harness works', () => {
@@ -133,4 +134,45 @@ test('sumSVAbzuege: ignores non-numeric markers like "Z"', () => {
     { tag: 'L', kvBeitrag: '100,00', rvBeitrag: 'Z', avBeitrag: '50,00', pvBeitrag: '' },
   ];
   assert.equal(sumSVAbzuege(rows), 150);
+});
+
+test('computeTotals: matches reference PDF', () => {
+  const state = {
+    brutto: [
+      { gb: 'J', menge: '79,75', faktor: '20,00' },
+      { gb: 'J', menge: '8',     faktor: '20,00' },
+      { gb: 'J', menge: '90,50', faktor: '20,00' },
+    ],
+    steuer: [
+      { tag: 'L', lohnsteuer: '79,25',  kirchensteuer: '', soli: '' },
+      { tag: 'N', lohnsteuer: '441,75', kirchensteuer: '', soli: '' },
+    ],
+    sv: [
+      { tag: 'L', kvBeitrag: '155,21', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+      { tag: 'N', kvBeitrag: '181,73', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+    ],
+    nettoBezuege: [],
+  };
+  const t = computeTotals(state);
+  assert.equal(t.gesamtBrutto, 3565);
+  assert.equal(t.steuerAbzuege, 521);
+  assert.equal(t.svAbzuege, 336.94);
+  assert.equal(t.nettoVerdienst, 2707.06);
+  assert.equal(t.auszahlungsbetrag, 2707.06);
+});
+
+test('computeTotals: netto rows shift the Auszahlungsbetrag', () => {
+  const state = {
+    brutto: [{ gb: 'J', menge: '100', faktor: '1,00' }],
+    steuer: [],
+    sv: [],
+    nettoBezuege: [
+      { betrag: '50,00' },
+      { betrag: '-10,00' },
+    ],
+  };
+  const t = computeTotals(state);
+  assert.equal(t.gesamtBrutto, 100);
+  assert.equal(t.nettoVerdienst, 100);
+  assert.equal(t.auszahlungsbetrag, 140);
 });

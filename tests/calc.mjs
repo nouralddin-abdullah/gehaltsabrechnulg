@@ -63,3 +63,24 @@ export function sumSteuerAbzuege(rows) {
 export function sumSVAbzuege(rows) {
   return _sumFields(rows, ['kvBeitrag', 'rvBeitrag', 'avBeitrag', 'pvBeitrag']);
 }
+
+function _sumBetrag(rows) {
+  let total = 0;
+  for (const r of rows) {
+    const v = parseDE(r.betrag);
+    if (v != null) total += v;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export function computeTotals(state) {
+  const gesamtBrutto = sumBrutto(state.brutto || []);
+  const steuerAbzuege = sumSteuerAbzuege(state.steuer || []);
+  const svAbzuege = sumSVAbzuege(state.sv || []);
+  const nettoSaldo = _sumBetrag(state.nettoBezuege || []);
+  const nettoVerdienst =
+    Math.round((gesamtBrutto - steuerAbzuege - svAbzuege) * 100) / 100;
+  const auszahlungsbetrag =
+    Math.round((nettoVerdienst + nettoSaldo) * 100) / 100;
+  return { gesamtBrutto, steuerAbzuege, svAbzuege, nettoVerdienst, auszahlungsbetrag };
+}
