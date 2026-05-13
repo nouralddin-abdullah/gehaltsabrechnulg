@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="de"><head>
+	<title>Lohn- und Einkommensteuerrechner:Fehlerseite</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	
+	<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+	<meta name="description" content="Interaktiver Rechner zur Berechnung der Lohn- und Einkommensteuer" />
+	<meta name="keywords" content="Steuerrechner,Steuer,Abgabe,BMF,Finanzen,Einkommen,Lohn,Gehalt,Brutto,Netto" />
+	<meta name="robots" content="index,follow" />
+	<meta name="revisit-after" content="15 days" />
+	<meta name="security" content="public" />
+		<script type="text/javascript"> //
+			/*&lt;![CDATA[*/
+			document.write('\x3Cscript type="text/javascript"\x3E/*');
+			/*&lt;]]&gt;*/
+		</script>
+		<meta http-equiv="Refresh" content="0;URL=/sonstiges/navigation/nojavascript.xhtml" />
+		<script type="text/javascript">
+			/**/
+		</script>
+	<link rel="stylesheet" media="print" type="text/css" href="/javax.faces.resource/templates/bitv20/css/bitv20print.2021.1.css.xhtml" />
+	<link rel="shortcut icon" type="image/x-icon" href="/javax.faces.resource/daten/grafiken/logos/favicon.ico.xhtml" />
+	
+<!-- 	&lt;h:outputScript name="js/jquery-2.1.4.min.js" /&gt; -->
+<!-- 	&lt;h:outputScript name="js/jquery-ui.min.js" /&gt; --><script type="text/javascript" src="/javax.faces.resource/js/jquery-3.3.1.min.js.xhtml"></script><script type="text/javascript" src="/javax.faces.resource/js/jquery-ui.1.12.1.min.js.xhtml"></script>
+	<script src="/papversion/papversion_2025.2.js"></script><link type="text/css" rel="stylesheet" href="/javax.faces.resource/templates/bitv20/css/bitv20.2021.1.css.xhtml" /><script type="text/javascript" src="/javax.faces.resource/jsf.js.xhtml?ln=javax.faces"></script></head><body><div class="wrapper information_screenreader">
+		<p>Für Benutzer mit Sprachausgabe, bitte Leseansicht aktivieren.</p>
+<form id="j_idt23" name="j_idt23" method="post" action="/error/fehler.xhtml" class="si_flex_item si_flex_item_right_flow" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="j_idt23" value="j_idt23" />
+<input id="j_idt23:close_infoscreen" type="submit" name="j_idt23:close_infoscreen" value="x" alt="Button zum Schließen der Information." title="Blendet die Sprachausgabeninformation aus solange die Session aktiv ist." class="close_infoscreen_button" onclick="mojarra.ab(this,event,'action',0,0,{'onevent':closeInformationScreenreader});return false" /><input type="hidden" name="javax.faces.ViewState" id="j_id1:javax.faces.ViewState:0" value="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" autocomplete="off" />
+</form></div>
+	<div class="wrapper template_kopf"><div id="kopf">
+			<div class="flex-item kopf_logo"><a href="http://www.bundesfinanzministerium.de" accesskey="y" title="Link zur Internetseite des Bundesministerium der Finanzen" class="alink "><img src="/javax.faces.resource/daten/grafiken/logos/logo.svg.xhtml" alt="Logo des Bundesfinanzministerium der Finanzen" /></a>
+			</div><div class="flex-item kopf_ueberschrift">
+				<h1><a href="/index.xhtml" class="alink " title="Link zur Startseite"><span class="linkText">Lohn- und Einkommensteuerrechner</span></a>
+				</h1></div><div class="flex-item kopf_menu">
+					<ul>
+						<li>
+<form id="startseite_menusteuerung" name="startseite_menusteuerung" method="post" action="/error/fehler.xhtml" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="startseite_menusteuerung" value="startseite_menusteuerung" />
+<input id="startseite_menusteuerung:income_kopf_menu" type="submit" name="startseite_menusteuerung:income_kopf_menu" value="Menü" accesskey="m" title="Öffnet das Menü" class="income_kopf_menu_button" onclick="mojarra.ab(this,event,'action',0,'menusteuerung_div',{'onevent':function(data){setMenuFocus(data,'sma_hauptmenu');}});return false" /><input type="hidden" name="javax.faces.ViewState" id="j_id1:javax.faces.ViewState:1" value="9ThLtS9a/J6Bx9GJjPcRiYUrSylfBonZQ5J33RLtKHnvC9zPbR3PgkfYPAiQ5jParhGXaK/MfSMfiCmk5CvzVZfWvl0ng2kkxnF8cteopF1AQ1Mnpoq4NdGfeCLrrGaxxR/UE/I55eif+TgRpoTnftDf5p+KHZSb53buGg6m6l/W+HcKmrSL+bffizXPlw+l0EJ7gZID+mAb7RbVd81gwPTTbmuwG9ukHSwWLr7zWyy30YERKylwqHnre7j2zDzz2SeXBCOGtDE5TliPIsf5OStEjxHV4W5YoFhiaPUhMZuJK8L3/kTft3jiX+OHdnVdZbKpipl9CdYgRb8/lXPwT098ekzG5aor+KfhPDQs6Hia04hp0tzStEixLh4iN3HxONnWtMUWBpgF/D2qAUD55z3PGz+yHc2VCDqAQoTyPj6+akn92ZDsIEPZi1fRYQYPm5TGBqfbsnX0wq25vpvK7jCFjQ9JrJXQ797SHMucksJp+xxmYovuQ5F6ZjyDK8C/SV2QsdDkFBCp/wW2k4XagR1TfqLTbDWZYMudxtBDX0MggZBF+7CiMm1A3DqKaiXwtYF241k5gIEbDXpRPfxkPZ9jazm4wU4e3JLNF8RoUHod44sHJusYhsncMYXO4GIxyvAjFlu/KgC0VKNiM0GBrkfXWsE/ZzIsiU0hQNvjOmk8Q8gDFSaK+s5ZtSpU5nOnnzzCP2ZAwUAkLsJuX3H67v+Xvrv3IcRKgS+tpGtez97Qn5FMIDlLUtUX630AWt48OvG/Og3znWkTGHax+yjgi8ynJh5komiNDLwBXEFe1vfKz8Cjc4VLgjLWDf6XUGB0a97R52r5geLJYFwh9TfrOWn0VY+YYEiquB9qVsp0UVVkDvfeww32UXbT0G868RKMGsEtT+No3bxS6ktLPPz7AxFoYcJEExaU+XcB1YJgqXmoLEsAX1aIilZbGzh4bb/vaPsQfmUGHFmKvVofRq8x2nndAKP/bKIllAsZ4qm6QGPngxLw45rMeNaizcBtZ4cBXGYuAnmollIbfDdcIyihQ5zOu+NVkG8oWpShYJ4qEdLRGnthgzEDObM9saqaT/Du6F6Lbz5X0Lx1ImNKtwos1cXA2dYzHpw8P6f5i6/Gb82irSKFWX8ZCnEWejnnTAs49W+7Jc4eo047ZgsTzVIM24QOBtOme5L2z3zjiGhzY6y1xzdq3VbgRBwjfHgR6ZqseeVAUT2Vmi34cBVccCxM+lhb7zQU5UzuKGb0lin5dJutkrFFNnAmmUPljUg72d7pNq7nxAChd0d9z7njGPTFQBCAZ+vtpnRoKSFFKEX0xS1y4qt8D19N9q4M/MpoK5Ux1Xz3NcV0pWQ5wU/ltDszudS+iLYXvbUGSuyIgRgJP0Q0CnFt60T4UakvyVhSdfyLjuzTY0sWiMwXYjQ8OONU8481swgYKZhHFlTYx6yEhDNFea+dUJtrLbQF1ytmyPVUK7Hq+LkVPSbgFFA6k/s9nff1EnRwh+wBLuRP42ciA0t31g/f07fny0dKVE3yMeH1SZrNBFO5oJMBUaQblrKvGLHM7AHU93zEk9kP6iiRT6IGx40F5pGIxeBYrrNsBQLgghdZSMP0RMHzmPAh5iyIvwqr+DdOMG+5lgJnDTXgJjhT2EQHYN3h84Kw0WVqAq102X8+ulXXjcXCmlP0QzLpT6+9kwLQd0O3GegX0ZIvAc9VYv2Wrxj7x7XjXaFrcP54oELonrm6b7xGfGiPI3y/6jlOSZcd0de/S4UpZ/Kd/PQ5n2tKRstdnjd22ww1vSxVit0qaKSLVFY205EE6fIlUa0eGjjjDtgaJqX7AfMqgj6DpzhFlECcblksrJgf9jWVpD0en1mft9Ux9NbLDV2qeu4wnEfxWmDY/2RBSqfyxLVO3SltbRc4lc72eToxcafVRjEJ9Zegft3l0uWyr+YXsMsbKLeXHFYmz2f1qfHz7RRMZVozdZ4vcUC6u1cAsgq1Ug8mT75LznYHGwsXHEVkZQ==" autocomplete="off" />
+</form></li>
+
+						<li><a href="http://www.bundesfinanzministerium.de/Web/DE/Meta/Gebaerdensprache/gebaerdensprache.html" title="Link zur Gebärdensprache">Gebärdensprache</a></li>
+						<li><a href="http://www.bundesfinanzministerium.de/Web/DE/Meta/Leichte_Sprache/leichte-sprache.html" title="Link zur leichten Sprache">Leichte Sprache</a></li>
+					</ul>
+					<div class="hotkeyMenu">
+<form id="startseite_menusteuerung_hotkey" name="startseite_menusteuerung_hotkey" method="post" action="/error/fehler.xhtml" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="startseite_menusteuerung_hotkey" value="startseite_menusteuerung_hotkey" />
+<input id="startseite_menusteuerung_hotkey:hidden_input_url" type="hidden" name="startseite_menusteuerung_hotkey:hidden_input_url" value="/error/fehler.xhtml?allgemeinerFehler=extern.interface.pseudocode.notfound" />
+							<ul>
+								<li><a href="/sonstiges/hilfe/hilfe.xhtml" class="alink income_hotkey_button_first" title="Link zur Benutzerhilfe"><span class="linkText">Hilfe</span></a></li>
+								<li><label for="startseite_menusteuerung_hotkey:hotkeySesssionManagerValue"><a href="/shortcut/shortcut.xhtml" class="alink income_hotkey_button" title="Link zum Aufruf der Hotkeys Übersicht"><span class="linkText">Hotkeys</span></a></label><input type="submit" name="startseite_menusteuerung_hotkey:j_idt63" value="Deaktivieren?" title="Aktualisiert die Seite mit deaktivierten Hotkeys." class="hotkey_change_button link" /><input id="startseite_menusteuerung_hotkey:hotkeySesssionManagerValue" type="checkbox" name="startseite_menusteuerung_hotkey:hotkeySesssionManagerValue" checked="checked" title="Zeigt den aktuellen Hotkey Status an: Aktiviert oder Deaktiviert" disabled="disabled" /> 
+								</li>
+							</ul><input type="hidden" name="javax.faces.ViewState" id="j_id1:javax.faces.ViewState:2" value="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" autocomplete="off" />
+</form>
+					</div><div class="hotkeyMenu">
+<form id="startseite_menusteuerung_leseansicht" name="startseite_menusteuerung_leseansicht" method="post" action="/error/fehler.xhtml" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="startseite_menusteuerung_leseansicht" value="startseite_menusteuerung_leseansicht" />
+<input id="startseite_menusteuerung_leseansicht:hidden_input_url" type="hidden" name="startseite_menusteuerung_leseansicht:hidden_input_url" value="/error/fehler.xhtml?allgemeinerFehler=extern.interface.pseudocode.notfound" />
+							<ul>
+								<li><label for="startseite_menusteuerung_leseansicht:leseansichtSesssionManagerValue" class="leseansicht_button">Leseansicht</label><input type="submit" name="startseite_menusteuerung_leseansicht:j_idt69" value="Aktivieren?" title="Aktualisiert die Seite mit aktivierter Leseansicht." class="hotkey_change_button link" /><input id="startseite_menusteuerung_leseansicht:leseansichtSesssionManagerValue" type="checkbox" name="startseite_menusteuerung_leseansicht:leseansichtSesssionManagerValue" title="Zeigt den aktuellen Leseansicht Status an: Aktiviert oder Deaktiviert" disabled="disabled" />
+								</li>
+							</ul><input type="hidden" name="javax.faces.ViewState" id="j_id1:javax.faces.ViewState:3" value="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" autocomplete="off" />
+</form></div></div></div>
+	</div><div class="wrapper template_navigation"><div id="menusteuerung_div"><script type="text/javascript" src="/javax.faces.resource/js/bmf-steuerrechner-menu.js.xhtml"></script></div>
+
+		<div id="breadcrumb_all">
+			<h2 id="breadcrumb_nav_h">Navigationspfad:</h2>
+			<ul id="breadcrumb">
+					<li><span> » </span><a href="/index.xhtml" class="alink " accesskey="s" title="Link zur Startseite"><span class="linkText">Startseite</span></a></li>
+				<li><span> » </span><span title="Aktuelle Seite: Fehlerseite">Fehlerseite</span></li>
+			</ul>
+		</div></div><div id="bmf_infobox" class="wrapper template_infobox"></div><div id="bmf_fehlerbox" class="wrapper template_fehlerbox"><div class="startseite_infobox"><div class="si_flex_box">
+				<h2 class="si_flex_item"><a href="#id-fehlerbox-focus" id="id-fehlerbox-focus" name="id-fehlerbox-focus">Fehlerbox</a></h2>
+				<span class="si_flex_item si_flex_item_right_flow"><strong><a class="si_fehlerbox_close" href="#" title="Schließen der Fehlerbox">x</a></strong></span></div><div class="si_infobox_content">
+				<ul>
+						<li><label for="id_link_startseite" class="si_infobox_error">Der von Ihnen angegebene Pseudocode existiert nicht.</label></li>
+				</ul></div></div></div>
+	<div class="wrapper template_inhalt">
+			<div class="fehler_seite">
+				<h1>
+					<strong>Fehler:</strong>
+				</h1>
+				<p>Bei Ihrer Anfrage ist ein Fehler aufgetaucht. Vermutlich
+					wurde die Seite nicht aus ihrem originalen Kontext heraus
+					aufgerufen. Bitte starten Sie Ihre Anfrage erneut über den Lohn-
+					und Einkommensteuerrechner.</p>
+				<p>
+					<strong id="id_link_startseite">Zurück zur <a href="/index.xhtml" class="alink " accesskey="s" title="Link zur Startseite"><span class="linkText">Startseite</span></a></strong>
+				</p>
+				<p>
+					Bei Fragen lesen Sie bitte die
+					<a href="http://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Service/Abgabenrechner/FAQ.html?__nnn=true" accesskey="q" title="Link zu Frequently Asked Questions (Häufig gestellte Fragen)" target="_self" class="alink ">
+			<span>FAQ</span></a>
+					zum Lohn- und Einkommensteuerrechner. Sollten Sie dort keine
+					ausreichenden Informationen finden, so wenden Sie sich mit Ihrer
+					Anfrage oder einem Vorschlag bitte direkt an:
+				</p>
+				<p>
+		<a href="mailto:Steuerrechner@bmf.bund.de" class="infoMail" title="E-Mail an das Team Steuerrechner">Steuerrechner@bmf.bund.de</a>
+				</p>
+									<p><br />
+					Das Team Steuerrechner ist für allgemeine Fragen zur technischen Umsetzung der Steuerberechnung im BMF-Steuerrechner zuständig und gibt bei Bedarf konkrete Anwendungshinweise. <b>Das Team Steuerrechner ist nicht berechtigt, Auskünfte zu persönlichen Einzelfällen und/oder Rechtsauskünfte zu erteilen.</b><br /> 
+Bitte haben Sie Verständnis, dass wir Anfragen dieser Art nicht beantworten und nicht weiterleiten werden.
+					
+					</p>
+			</div>
+	</div><div class="wrapper template_fuss">
+		<ul id="fuss">
+			<li>© 2026 Bundesministerium der Finanzen
+			</li>
+				<li><a href="/sonstiges/hilfe/hilfe.xhtml" class="alink " title="Link zur Benutzerhilfe"><span class="linkText">Benutzerhilfe</span></a></li>
+				<li><a href="/sitemap/sitemap.xhtml" class="alink " accesskey="a" title="Link zum Aufruf des Inhaltsverzeichnis der Webseite"><span class="linkText">Inhaltsverzeichnis</span></a></li>
+				<li><a href="/sonstiges/impressum/impressum.xhtml" class="alink " accesskey="i" title="Link zum Impressum"><span class="linkText">Impressum</span></a></li>
+				<li><a href="/sonstiges/datenschutz/datenschutz.xhtml" class="alink " accesskey="z" title="Link zum Datenschutz"><span class="linkText">Datenschutz</span></a></li>
+				<li><a href="https://www.bundesfinanzministerium.de/Web/DE/Service/FAQ_Glossar/Glossar/Functions/glossar.html" accesskey="g" title="Link zum Glossar des Bundesfinanzministeriums" target="_blank" class="alink ">
+			<span>Glossar</span></a></li>
+				<li><a href="/archiv" title="Link zur Archiv-Version des Steuerrechners (31.12.2019)" target="_blank" class="alink ">
+			<span>Archiv</span></a></li>
+		</ul></div><script type="text/javascript" src="/javax.faces.resource/js/bmf-steuerrechner.js.xhtml"></script></body>
+</html>
