@@ -1217,7 +1217,63 @@
       document.getElementById('gesamtBruttoCell').textContent = formatDE(totals.gesamtBrutto);
     }
 
+    function applyAutomatik() {
+      const a = state.automatik;
+      if (!a || !a.enabled) return null;
+      const totals = computeTotals(state);
+      const monthlyBrutto = totals.gesamtBrutto;
+      if (!monthlyBrutto) return null;
+
+      const kkZ = parseDE(a.kkZusatzbeitrag);
+      const kkRate = kkZ == null ? 0.017 : kkZ / 100;
+      const faktor = parseDE(a.faktor) || undefined;
+      const freib = parseDE(a.freibetragMonatlich) || 0;
+
+      const lst = calculateLohnsteuer({
+        brutto: monthlyBrutto,
+        steuerklasse: a.steuerklasse,
+        faktor,
+        freibetragMonatlich: freib,
+        konfession: a.konfession,
+        bundesland: a.bundesland,
+      });
+      const sv = calculateSV({
+        brutto: monthlyBrutto,
+        kinder: a.kinder,
+        age: a.age,
+        bundesland: a.bundesland,
+        midijob: a.midijob,
+        kkZusatzbeitrag: kkRate,
+        westOst: a.westOst,
+      });
+
+      // Overwrite the L row of state.steuer + state.sv with auto values.
+      // Leave N rows alone (Nachberechnung remains manual).
+      if (!state.steuer[0]) state.steuer[0] = { tag: 'L' };
+      Object.assign(state.steuer[0], {
+        tag: 'L',
+        steuerBrutto: formatDE(lst.steuerBrutto),
+        lohnsteuer: formatDE(lst.lohnsteuer),
+        kirchensteuer: lst.kirchensteuer > 0 ? formatDE(lst.kirchensteuer) : '',
+        soli: lst.soli > 0 ? formatDE(lst.soli) : '',
+      });
+      if (!state.sv[0]) state.sv[0] = { tag: 'L' };
+      Object.assign(state.sv[0], {
+        tag: 'L',
+        kvBrutto: formatDE(sv.kvBrutto),
+        rvBrutto: formatDE(sv.rvBrutto),
+        avBrutto: formatDE(sv.avBrutto),
+        pvBrutto: formatDE(sv.pvBrutto),
+        kvBeitrag: formatDE(sv.kvBeitrag),
+        rvBeitrag: formatDE(sv.rvBeitrag),
+        avBeitrag: formatDE(sv.avBeitrag),
+        pvBeitrag: formatDE(sv.pvBeitrag),
+      });
+      return { lst, sv };
+    }
+
     function renderSteuerUndSV() {
+      applyAutomatik();
       const sbody = document.getElementById('steuerBody');
       sbody.innerHTML = '';
       for (const r of state.steuer) {
@@ -1370,25 +1426,33 @@
       });
     }
 
-    function renderRowsEditor(rootId, list, fields, placeholders) {
+    function renderRowsEditor(rootId, list, fields, placeholders, opts = {}) {
       const root = document.getElementById(rootId);
       root.innerHTML = '';
       list.forEach((r, i) => {
         const wrap = document.createElement('div');
         wrap.className = 'row-editor';
+        const isLockedLRow = opts.lockLRow && i === 0 && (r.tag === 'L' || !r.tag);
         let html = '';
         fields.forEach((f, idx) => {
-          html += `<input value="${esc(r[f])}" placeholder="${placeholders[idx]}" data-f="${f}">`;
+          const lockedAttr = isLockedLRow ? 'readonly title="Automatik – manuell bearbeiten: Automatik deaktivieren"' : '';
+          const style = isLockedLRow ? 'background:#eef3ff;color:#345;' : '';
+          html += `<input value="${esc(r[f])}" placeholder="${placeholders[idx]}" data-f="${f}" ${lockedAttr} style="${style}">`;
         });
         html += `<button class="danger" data-action="del">×</button>`;
         wrap.innerHTML = html;
         wrap.querySelectorAll('input').forEach(inp => {
+          if (isLockedLRow) return;
           inp.addEventListener('input', e => {
             r[e.target.dataset.f] = e.target.value;
             render();
           });
         });
         wrap.querySelector('[data-action="del"]').addEventListener('click', () => {
+          if (isLockedLRow) {
+            alert('Diese Zeile wird automatisch berechnet. Bitte Automatik deaktivieren, um sie zu löschen.');
+            return;
+          }
           list.splice(i, 1); render();
         });
         root.appendChild(wrap);
@@ -1396,13 +1460,16 @@
     }
 
     function renderEditors() {
+      const lockLRow = !!(state.automatik && state.automatik.enabled);
       renderBruttoEditor();
       renderRowsEditor('steuerEditor', state.steuer,
         ['tag','steuerBrutto','lohnsteuer','kirchensteuer','soli'],
-        ['Tag (L/N)','Steuer-Brutto','Lohnsteuer','Kirchensteuer','Soli']);
+        ['Tag (L/N)','Steuer-Brutto','Lohnsteuer','Kirchensteuer','Soli'],
+        { lockLRow });
       renderRowsEditor('svEditor', state.sv,
         ['tag','kvBrutto','rvBrutto','avBrutto','pvBrutto','kvBeitrag','rvBeitrag','avBeitrag','pvBeitrag'],
-        ['Tag','KV-Bru','RV-Bru','AV-Bru','PV-Bru','KV-Bei','RV-Bei','AV-Bei','PV-Bei']);
+        ['Tag','KV-Bru','RV-Bru','AV-Bru','PV-Bru','KV-Bei','RV-Bei','AV-Bei','PV-Bei'],
+        { lockLRow });
       renderRowsEditor('nettoEditor', state.nettoBezuege,
         ['lohnart','bezeichnung','betrag'],
         ['Lohnart','Bezeichnung','Betrag']);
