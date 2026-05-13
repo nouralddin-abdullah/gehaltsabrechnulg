@@ -295,6 +295,53 @@
     }
     .slip .netto-total .label { font-size: var(--caption-size); display: block; text-align: left; }
     .slip .netto-total .value { font-family: var(--mono); font-size: 10pt; font-weight: 700; }
+
+    .slip .footer-row {
+      display: grid;
+      grid-template-columns: 1.4fr 0.6fr 0.8fr 0.8fr 0.8fr auto;
+      gap: 3mm;
+      align-items: end;
+      margin-top: 5mm;
+      border-top: 1px solid var(--slip-rule);
+      padding-top: 2mm;
+    }
+    .slip .footer-row .cell .label { font-size: var(--caption-size); display: block; }
+    .slip .footer-row .cell .value { font-family: var(--mono); font-size: var(--value-size); }
+    .slip .footer-row .auszahlung {
+      border: 1px solid var(--slip-rule-strong);
+      padding: 1mm 2mm;
+      min-width: 40mm;
+      text-align: right;
+    }
+    .slip .footer-row .auszahlung .label { font-size: var(--caption-size); display: block; text-align: left; }
+    .slip .footer-row .auszahlung .value { font-family: var(--mono); font-size: 11pt; font-weight: 700; }
+
+    .slip .footnotes {
+      margin-top: 4mm;
+      font-size: 6.5pt;
+      line-height: 1.35;
+      color: #333;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 2mm 6mm;
+    }
+    .slip .legal-line {
+      margin-top: 2mm;
+      font-size: 6.5pt;
+      color: #333;
+    }
+    .slip .datev-spot {
+      margin-top: 1mm;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 2mm;
+    }
+    .slip .datev-spot .placeholder {
+      width: 20mm;
+      height: 10mm;
+      border: 1px dashed #bbb;
+    }
   </style>
 </head>
 <body>
@@ -441,6 +488,55 @@
           <span class="label">Netto-Verdienst</span>
           <span class="value" id="nettoVerdienstCell">0,00</span>
         </div>
+      </div>
+
+      <div class="footer-row">
+        <div class="cell">
+          <span class="label">Bank</span>
+          <span class="value" id="fBank"></span>
+          <div style="margin-top: 1mm;">
+            <span class="label">Konto</span>
+            <span class="value" id="fIban"></span>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="label">&nbsp;</span>
+          <span class="value" id="fCode"></span>
+        </div>
+        <div class="cell">
+          <span class="label">SV-AG-Anteil</span>
+          <span class="value" id="fSvAg"></span>
+        </div>
+        <div class="cell">
+          <span class="label">Zus. AG-Kosten</span>
+          <span class="value" id="fZusAg"></span>
+        </div>
+        <div class="cell">
+          <span class="label">Gesamtkosten</span>
+          <span class="value" id="fGesamt"></span>
+        </div>
+        <div class="auszahlung">
+          <span class="label">Auszahlungsbetrag</span>
+          <span class="value" id="fAuszahlung">0,00</span>
+        </div>
+      </div>
+
+      <div class="footnotes">
+        <div>¹ H = Hinzurechnungsbetrag</div>
+        <div>² Std = Stunden, T = Tage, Km = Kilometer, St = Stück; EUR = Euro, Tsd = Tausend Euro, Mio = Million Euro</div>
+        <div>³ Gegebenenfalls Netto-Lohn/Netto-Stundenlohn</div>
+        <div>⁴ L = Laufender Bezug, S = Sonstiger Bezug, F = Frei, E = Einmalbezug, P = Pauschalierung, A = Abfindung, M = mehrjährige Versteuerung, N = Nachberechnung, V = Vorjahr, W = Entgeltguthaben</div>
+        <div>⁵ J = Bestandteil des Gesamt-Brutto</div>
+        <div>⁶ Z = Einschl. Beitragszuschlag zur PV für Kinderlose</div>
+        <div>⁷ MFB = Mehrfachbeschäftigung</div>
+        <div>⁸ Maßgeblicher Beitragssatz zur KV inkl. Zusatzbeitrag</div>
+      </div>
+
+      <div class="legal-line">- Dies ist eine Entgeltbescheinigung nach § 108 Abs. 3 Satz 1 der Gewerbeordnung -</div>
+
+      <div class="datev-spot">
+        <div style="font-size: 6.5pt; color: #444;">AFP Form.-Nr. LNGN14</div>
+        <div class="placeholder" aria-label="Logo-Platzhalter"></div>
       </div>
     </section>
   </div>
@@ -767,12 +863,25 @@
       document.getElementById('nettoVerdienstCell').textContent = formatDE(t.nettoVerdienst);
     }
 
+    function renderFooter() {
+      const b = state.bank;
+      document.getElementById('fBank').textContent = b.name;
+      document.getElementById('fIban').textContent = b.iban;
+      document.getElementById('fCode').textContent = b.code;
+      document.getElementById('fSvAg').textContent = b.svAgAnteil;
+      document.getElementById('fZusAg').textContent = b.zusAgKosten;
+      document.getElementById('fGesamt').textContent = b.gesamtkosten;
+      const t = computeTotals(state);
+      document.getElementById('fAuszahlung').textContent = formatDE(t.auszahlungsbetrag);
+    }
+
     function render() {
       renderMeta();
       renderEmployerAndAddress();
       renderBrutto();
       renderSteuerUndSV();
       renderVerdienst();
+      renderFooter();
     }
 
     document.addEventListener('DOMContentLoaded', render);
