@@ -15,7 +15,151 @@
     <section class="slip" aria-label="Vorschau"></section>
   </div>
   <script>
-    // JS will be added in later tasks
+    // ===== Inlined from tests/calc.mjs - keep in sync (Task 15 verifies) =====
+    const _fmt = new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    function parseDE(input) {
+      if (typeof input === 'number') return input;
+      if (input == null) return null;
+      const s = String(input).trim();
+      if (s === '') return null;
+      const normalized = s.replace(/\./g, '').replace(',', '.');
+      const n = Number(normalized);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function formatDE(n) {
+      if (n == null || !Number.isFinite(n)) return '';
+      return _fmt.format(n);
+    }
+
+    function computeRowBetrag(row) {
+      if (row.hinweis) return null;
+      const explicit = parseDE(row.betrag);
+      if (explicit != null) return explicit;
+      const menge = parseDE(row.menge);
+      const faktor = parseDE(row.faktor);
+      if (menge == null || faktor == null) return null;
+      return Math.round(menge * faktor * 100) / 100;
+    }
+
+    function sumBrutto(rows) {
+      let total = 0;
+      for (const r of rows) {
+        if (r.hinweis) continue;
+        if ((r.gb || '').toUpperCase() !== 'J') continue;
+        const b = computeRowBetrag(r);
+        if (b != null) total += b;
+      }
+      return Math.round(total * 100) / 100;
+    }
+
+    function _sumFields(rows, fields) {
+      let total = 0;
+      for (const r of rows) {
+        for (const f of fields) {
+          const v = parseDE(r[f]);
+          if (v != null) total += v;
+        }
+      }
+      return Math.round(total * 100) / 100;
+    }
+
+    function sumSteuerAbzuege(rows) {
+      return _sumFields(rows, ['lohnsteuer', 'kirchensteuer', 'soli']);
+    }
+
+    function sumSVAbzuege(rows) {
+      return _sumFields(rows, ['kvBeitrag', 'rvBeitrag', 'avBeitrag', 'pvBeitrag']);
+    }
+
+    function _sumBetrag(rows) {
+      let total = 0;
+      for (const r of rows) {
+        const v = parseDE(r.betrag);
+        if (v != null) total += v;
+      }
+      return Math.round(total * 100) / 100;
+    }
+
+    function computeTotals(state) {
+      const gesamtBrutto = sumBrutto(state.brutto || []);
+      const steuerAbzuege = sumSteuerAbzuege(state.steuer || []);
+      const svAbzuege = sumSVAbzuege(state.sv || []);
+      const nettoSaldo = _sumBetrag(state.nettoBezuege || []);
+      const nettoVerdienst =
+        Math.round((gesamtBrutto - steuerAbzuege - svAbzuege) * 100) / 100;
+      const auszahlungsbetrag =
+        Math.round((nettoVerdienst + nettoSaldo) * 100) / 100;
+      return { gesamtBrutto, steuerAbzuege, svAbzuege, nettoVerdienst, auszahlungsbetrag };
+    }
+    // ===== End of inlined calc.mjs =====
+
+    const state = {
+      meta: {
+        persNr: '00107', geburtsdatum: '021097', stKl: '1', faktor: '',
+        kiFrbtr: '', konfession: '', freibetragJ: '', freibetragM: '',
+        dba: '', midijob: 'Ja', stTg: '30',
+        vjUrlUeb: '', urlAnspr: '', urlTgGen: '', resturlaub: '',
+        anwTage: '', urlaubTage: '', krankhTg: '', fehlzTage: '',
+        anwStd: '', urlaubStd: '', krankhStd: '', fehlzStd: '',
+        zeitlohnStd: '', ueberstd: '', bezStd: '',
+        svNummer: '25021097A060', krankenkasse: 'AOK Sachsen-Anhalt',
+        kkProzent: '106 0100 2 30', pgrs: '', bgrs: '', umSvTg: '',
+        eintritt: '290719', austritt: '',
+        steuerId: '15270956832', mfb: '',
+        rocCode: 'R0C', mandant: '133267/30605/00107',
+        druckdatum: '23.10.2023', blatt: '1',
+        persNrBox: '00107', abtNr: '1', bn: 'B/N', mandantBox: '30605',
+      },
+      firma: 'ILS Integrated Lab Solutions GmbH*Barbara-McClintock-Straße 11*12489 Berlin',
+      mitarbeiter: {
+        name: 'Yacoub Youssef Abu Naaj',
+        strasse: 'Joachimsthaler Str. 6',
+        plzOrt: '13055 Berlin',
+      },
+      zeitraum: { monat: 'Oktober', jahr: '2023' },
+      brutto: [
+        { lohnart: '1000', bezeichnung: 'Stundenlohn',   einheit: 'Std', menge: '79,75', faktor: '20,00', prozent: '', st: 'L', sv: 'L', gb: 'J' },
+        { lohnart: '1012', bezeichnung: 'Feiertagslohn', einheit: 'Std', menge: '8',     faktor: '20,00', prozent: '', st: 'L', sv: 'L', gb: 'J' },
+        { hinweis: true, text: 'Nachberechnung 09/2023: - Midijob nicht angewandt -' },
+        { lohnart: '1000', bezeichnung: 'Stundenlohn',   einheit: 'Std', menge: '90,50', faktor: '20,00', prozent: '', st: 'L', sv: 'L', gb: 'J' },
+      ],
+      steuer: [
+        { tag: 'L', steuerBrutto: '1.755,00', lohnsteuer: '79,25',  kirchensteuer: '', soli: '' },
+        { tag: 'N', steuerBrutto: '1.810,00', lohnsteuer: '441,75', kirchensteuer: '', soli: '' },
+      ],
+      sv: [
+        { tag: 'L', kvBrutto: '1.668,92', rvBrutto: '', avBrutto: '', pvBrutto: '', kvBeitrag: '155,21', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+        { tag: 'N', kvBrutto: '1.854,34', rvBrutto: '', avBrutto: '', pvBrutto: '', kvBeitrag: '181,73', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+      ],
+      verdienst: {
+        nachberechnungVorjahr: true,
+        gesamtBrutto: '19.251,00', steuerBrutto: '19.251,00', lohnsteuer: '1.397,48',
+        kirchensteuer: '', soli: '', steuerfreieBezuege: '', pVerstZukSich: '',
+        pfaendungRest: '', darlehenRest: '',
+        svBrutto: '18.843,26', kvBeitrag: '1.668,11', rvBeitrag: '', avBeitrag: '', pvBeitrag: '',
+        vwlGesamt: '', kugAuszahlung: '',
+      },
+      nettoBezuege: [],
+      bank: {
+        name: 'Deutsche Bank',
+        iban: 'DE97 1007 0124 0303 6XXX XX',
+        svAgAnteil: '', zusAgKosten: '', gesamtkosten: '',
+        code: '32946',
+      },
+      hinweiseZurAbrechnung: '',
+    };
+
+    function render() {
+      // Wired up section by section in later tasks.
+      console.log('totals ->', computeTotals(state));
+    }
+
+    document.addEventListener('DOMContentLoaded', render);
   </script>
 </body>
 </html>
