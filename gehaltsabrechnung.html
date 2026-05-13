@@ -238,6 +238,63 @@
     }
     .slip .ssv-total .label { font-size: var(--caption-size); display: block; text-align: left; }
     .slip .ssv-total .value { font-family: var(--mono); font-size: 10pt; font-weight: 700; }
+
+    .slip .verdienst-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 4mm;
+      margin-top: 5mm;
+    }
+    .slip .verdienst {
+      font-size: var(--value-size);
+    }
+    .slip .verdienst .heading {
+      font-size: 8pt;
+      font-weight: 700;
+      margin-bottom: 1.5mm;
+    }
+    .slip .verdienst .heading .suffix {
+      font-weight: 400;
+      margin-left: 1.5mm;
+    }
+    .slip .verdienst .col-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2mm;
+    }
+    .slip .verdienst .kv {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2mm;
+      padding: 0.3mm 0;
+    }
+    .slip .verdienst .kv .k { font-size: 7.5pt; color: #222; }
+    .slip .verdienst .kv .v { font-family: var(--mono); font-size: var(--value-size); }
+
+    .slip table.netto {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--value-size);
+    }
+    .slip table.netto th {
+      font-weight: 400;
+      font-size: var(--caption-size);
+      text-align: left;
+      border-bottom: 1px solid var(--slip-rule);
+      padding: 0.5mm 1.2mm;
+    }
+    .slip table.netto td { padding: 0.4mm 1.2mm; }
+    .slip table.netto td.num { font-family: var(--mono); text-align: right; }
+
+    .slip .netto-total {
+      border: 1px solid var(--slip-rule-strong);
+      padding: 1mm 2mm;
+      min-width: 38mm;
+      text-align: right;
+      align-self: end;
+    }
+    .slip .netto-total .label { font-size: var(--caption-size); display: block; text-align: left; }
+    .slip .netto-total .value { font-family: var(--mono); font-size: 10pt; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -338,6 +395,51 @@
             <span class="label">SV-rechtliche Abzüge</span>
             <span class="value" id="svTotal">0,00</span>
           </div>
+        </div>
+      </div>
+
+      <div class="verdienst-block">
+        <div class="verdienst">
+          <div class="heading">
+            Verdienstbescheinigung<span class="suffix" id="verdienstSuffix"></span>
+          </div>
+          <div class="col-pair">
+            <div>
+              <div class="kv"><span class="k">Gesamt-Brutto</span><span class="v" id="vGesamtBrutto"></span></div>
+              <div class="kv"><span class="k">Steuer-Brutto</span><span class="v" id="vSteuerBrutto"></span></div>
+              <div class="kv"><span class="k">Lohnsteuer</span><span class="v" id="vLohnsteuer"></span></div>
+              <div class="kv"><span class="k">Kirchensteuer</span><span class="v" id="vKirchensteuer"></span></div>
+              <div class="kv"><span class="k">Solidaritätszuschlag</span><span class="v" id="vSoli"></span></div>
+              <div class="kv"><span class="k">Steuerfreie Bezüge</span><span class="v" id="vSteuerfrei"></span></div>
+              <div class="kv"><span class="k">P. verst. Zuk.sich.</span><span class="v" id="vPverstZukSich"></span></div>
+              <div class="kv"><span class="k">Pfändung Rest</span><span class="v" id="vPfaendungRest"></span></div>
+              <div class="kv"><span class="k">Darlehen Rest</span><span class="v" id="vDarlehenRest"></span></div>
+            </div>
+            <div>
+              <div class="kv"><span class="k">SV-Brutto</span><span class="v" id="vSvBrutto"></span></div>
+              <div class="kv"><span class="k">KV-Beitrag</span><span class="v" id="vKvBeitrag"></span></div>
+              <div class="kv"><span class="k">RV-Beitrag</span><span class="v" id="vRvBeitrag"></span></div>
+              <div class="kv"><span class="k">AV-Beitrag</span><span class="v" id="vAvBeitrag"></span></div>
+              <div class="kv"><span class="k">PV-Beitrag</span><span class="v" id="vPvBeitrag"></span></div>
+              <div class="kv"><span class="k">VWL gesamt</span><span class="v" id="vVwl"></span></div>
+              <div class="kv"><span class="k">Kug-Auszahlung</span><span class="v" id="vKug"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="heading">Netto-Bezüge/Netto-Abzüge</div>
+          <table class="netto">
+            <thead>
+              <tr><th>Lohnart</th><th>Bezeichnung</th><th class="num">Betrag</th></tr>
+            </thead>
+            <tbody id="nettoBody"></tbody>
+          </table>
+        </div>
+
+        <div class="netto-total">
+          <span class="label">Netto-Verdienst</span>
+          <span class="value" id="nettoVerdienstCell">0,00</span>
         </div>
       </div>
     </section>
@@ -632,11 +734,45 @@
       document.getElementById('svTotal').textContent = formatDE(t.svAbzuege);
     }
 
+    function renderVerdienst() {
+      const v = state.verdienst;
+      document.getElementById('verdienstSuffix').textContent =
+        v.nachberechnungVorjahr ? 'mit Nachberechnung Vorjahr' : '';
+      const map = {
+        vGesamtBrutto: v.gesamtBrutto, vSteuerBrutto: v.steuerBrutto,
+        vLohnsteuer: v.lohnsteuer, vKirchensteuer: v.kirchensteuer,
+        vSoli: v.soli, vSteuerfrei: v.steuerfreieBezuege,
+        vPverstZukSich: v.pVerstZukSich, vPfaendungRest: v.pfaendungRest,
+        vDarlehenRest: v.darlehenRest,
+        vSvBrutto: v.svBrutto, vKvBeitrag: v.kvBeitrag, vRvBeitrag: v.rvBeitrag,
+        vAvBeitrag: v.avBeitrag, vPvBeitrag: v.pvBeitrag,
+        vVwl: v.vwlGesamt, vKug: v.kugAuszahlung,
+      };
+      for (const [id, val] of Object.entries(map)) {
+        document.getElementById(id).textContent = val ?? '';
+      }
+
+      const body = document.getElementById('nettoBody');
+      body.innerHTML = '';
+      for (const r of state.nettoBezuege) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.lohnart ?? ''}</td>
+          <td>${r.bezeichnung ?? ''}</td>
+          <td class="num">${formatDE(parseDE(r.betrag))}</td>
+        `;
+        body.appendChild(tr);
+      }
+      const t = computeTotals(state);
+      document.getElementById('nettoVerdienstCell').textContent = formatDE(t.nettoVerdienst);
+    }
+
     function render() {
       renderMeta();
       renderEmployerAndAddress();
       renderBrutto();
       renderSteuerUndSV();
+      renderVerdienst();
     }
 
     document.addEventListener('DOMContentLoaded', render);
