@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseDE, formatDE,
   computeRowBetrag, sumBrutto,
+  sumSteuerAbzuege, sumSVAbzuege,
 } from './calc.mjs';
 
 test('test harness works', () => {
@@ -97,4 +98,39 @@ test('sumBrutto: only GB=J rows are summed', () => {
 
 test('sumBrutto: empty list -> 0', () => {
   assert.equal(sumBrutto([]), 0);
+});
+
+test('sumSteuerAbzuege: reference PDF L+N rows = 521', () => {
+  const rows = [
+    { tag: 'L', lohnsteuer: '79,25',  kirchensteuer: '', soli: '' },
+    { tag: 'N', lohnsteuer: '441,75', kirchensteuer: '', soli: '' },
+  ];
+  assert.equal(sumSteuerAbzuege(rows), 521);
+});
+
+test('sumSteuerAbzuege: includes all three columns', () => {
+  const rows = [
+    { tag: 'L', lohnsteuer: '100,00', kirchensteuer: '8,00', soli: '5,50' },
+  ];
+  assert.equal(sumSteuerAbzuege(rows), 113.5);
+});
+
+test('sumSteuerAbzuege: blanks treated as 0', () => {
+  const rows = [{ tag: 'L', lohnsteuer: '', kirchensteuer: '', soli: '' }];
+  assert.equal(sumSteuerAbzuege(rows), 0);
+});
+
+test('sumSVAbzuege: reference PDF L+N rows = 336.94', () => {
+  const rows = [
+    { tag: 'L', kvBeitrag: '155,21', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+    { tag: 'N', kvBeitrag: '181,73', rvBeitrag: '', avBeitrag: 'Z', pvBeitrag: '' },
+  ];
+  assert.equal(sumSVAbzuege(rows), 336.94);
+});
+
+test('sumSVAbzuege: ignores non-numeric markers like "Z"', () => {
+  const rows = [
+    { tag: 'L', kvBeitrag: '100,00', rvBeitrag: 'Z', avBeitrag: '50,00', pvBeitrag: '' },
+  ];
+  assert.equal(sumSVAbzuege(rows), 150);
 });

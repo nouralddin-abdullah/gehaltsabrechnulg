@@ -44,3 +44,22 @@ export function sumBrutto(rows) {
   }
   return Math.round(total * 100) / 100;
 }
+
+function _sumFields(rows, fields) {
+  let total = 0;
+  for (const r of rows) {
+    for (const f of fields) {
+      const v = parseDE(r[f]);
+      if (v != null) total += v;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export function sumSteuerAbzuege(rows) {
+  return _sumFields(rows, ['lohnsteuer', 'kirchensteuer', 'soli']);
+}
+
+export function sumSVAbzuege(rows) {
+  return _sumFields(rows, ['kvBeitrag', 'rvBeitrag', 'avBeitrag', 'pvBeitrag']);
+}
