@@ -342,11 +342,180 @@
       height: 10mm;
       border: 1px dashed #bbb;
     }
+
+    .form-panel h2 {
+      font-size: 14px;
+      margin: 12px 0 6px 0;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 4px;
+    }
+    .form-panel .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px 10px;
+      margin-bottom: 10px;
+    }
+    .form-panel label {
+      display: flex;
+      flex-direction: column;
+      font-size: 11px;
+      color: #333;
+    }
+    .form-panel input, .form-panel select, .form-panel textarea {
+      font: inherit;
+      padding: 4px 6px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .form-panel textarea { min-height: 50px; resize: vertical; }
+    .form-panel .toolbar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .form-panel button {
+      font: inherit;
+      font-size: 12px;
+      padding: 6px 10px;
+      background: #2a6df4;
+      color: #fff;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .form-panel button.secondary { background: #6c757d; }
+    .form-panel button.danger { background: #c82333; }
+    .form-panel .row-editor {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr) auto;
+      gap: 4px;
+      margin-bottom: 4px;
+      align-items: end;
+    }
+    .form-panel .row-editor input { font-size: 11px; padding: 3px 5px; min-width: 0; }
+    .form-panel .hint-editor {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
   <div class="app">
-    <section class="form-panel" aria-label="Eingabe"></section>
+    <section class="form-panel" aria-label="Eingabe">
+      <div class="toolbar">
+        <button id="btnPrint">Drucken / PDF</button>
+        <button class="secondary" id="btnSave">Speichern als JSON</button>
+        <button class="secondary" id="btnLoad">Laden aus JSON</button>
+        <input type="file" id="loadFile" accept="application/json" hidden>
+      </div>
+
+      <h2>Abrechnungs-Zeitraum</h2>
+      <div class="grid">
+        <label>Monat<input data-bind="zeitraum.monat"></label>
+        <label>Jahr<input data-bind="zeitraum.jahr"></label>
+        <label>Druckdatum<input data-bind="meta.druckdatum"></label>
+        <label>Blatt<input data-bind="meta.blatt"></label>
+      </div>
+
+      <h2>Kopfdaten</h2>
+      <div class="grid">
+        <label>Personal-Nr.<input data-bind="meta.persNr"></label>
+        <label>Geburtsdatum<input data-bind="meta.geburtsdatum"></label>
+        <label>StKl<input data-bind="meta.stKl"></label>
+        <label>Faktor<input data-bind="meta.faktor"></label>
+        <label>Ki.Frbtr<input data-bind="meta.kiFrbtr"></label>
+        <label>Konfession<input data-bind="meta.konfession"></label>
+        <label>Freibetrag jährl.<input data-bind="meta.freibetragJ"></label>
+        <label>Freibetrag mtl.<input data-bind="meta.freibetragM"></label>
+        <label>DBA<input data-bind="meta.dba"></label>
+        <label>Midijob<input data-bind="meta.midijob"></label>
+        <label>St-Tg<input data-bind="meta.stTg"></label>
+        <label>SV-Nummer<input data-bind="meta.svNummer"></label>
+        <label>Krankenkasse<input data-bind="meta.krankenkasse"></label>
+        <label>KK %<input data-bind="meta.kkProzent"></label>
+        <label>PGRS<input data-bind="meta.pgrs"></label>
+        <label>BGRS<input data-bind="meta.bgrs"></label>
+        <label>Um.SV-Tg<input data-bind="meta.umSvTg"></label>
+        <label>Eintritt<input data-bind="meta.eintritt"></label>
+        <label>Austritt<input data-bind="meta.austritt"></label>
+        <label>Steuer-ID<input data-bind="meta.steuerId"></label>
+        <label>MFB<input data-bind="meta.mfb"></label>
+        <label>Mandant-Code (oben)<input data-bind="meta.mandant"></label>
+        <label>R0C-Code<input data-bind="meta.rocCode"></label>
+        <label>Pers.-Nr. (Box)<input data-bind="meta.persNrBox"></label>
+        <label>Abt.-Nr.<input data-bind="meta.abtNr"></label>
+        <label>Mandant-Code (Box)<input data-bind="meta.mandantBox"></label>
+        <label>B/N<input data-bind="meta.bn"></label>
+      </div>
+
+      <h2>Firma</h2>
+      <label>Eine Zeile, mit * als Trenner<textarea data-bind="firma"></textarea></label>
+
+      <h2>Mitarbeiter</h2>
+      <div class="grid">
+        <label>Name<input data-bind="mitarbeiter.name"></label>
+        <label>Straße<input data-bind="mitarbeiter.strasse"></label>
+        <label>PLZ + Ort<input data-bind="mitarbeiter.plzOrt"></label>
+      </div>
+
+      <h2>Hinweise zur Abrechnung</h2>
+      <textarea data-bind="hinweiseZurAbrechnung"></textarea>
+
+      <h2>Brutto-Bezüge</h2>
+      <div id="bruttoEditor"></div>
+      <div class="toolbar">
+        <button id="btnAddBrutto">+ Zeile hinzufügen</button>
+        <button class="secondary" id="btnAddHinweis">+ Hinweis hinzufügen</button>
+      </div>
+
+      <h2>Steuer (manuelle Eingabe)</h2>
+      <div id="steuerEditor"></div>
+
+      <h2>Sozialversicherung (manuelle Eingabe)</h2>
+      <div id="svEditor"></div>
+
+      <h2>Verdienstbescheinigung (Jahres-Werte)</h2>
+      <div class="grid">
+        <label><input type="checkbox" data-bind-check="verdienst.nachberechnungVorjahr"> mit Nachberechnung Vorjahr</label>
+        <span></span>
+        <label>Gesamt-Brutto<input data-bind="verdienst.gesamtBrutto"></label>
+        <label>SV-Brutto<input data-bind="verdienst.svBrutto"></label>
+        <label>Steuer-Brutto<input data-bind="verdienst.steuerBrutto"></label>
+        <label>KV-Beitrag<input data-bind="verdienst.kvBeitrag"></label>
+        <label>Lohnsteuer<input data-bind="verdienst.lohnsteuer"></label>
+        <label>RV-Beitrag<input data-bind="verdienst.rvBeitrag"></label>
+        <label>Kirchensteuer<input data-bind="verdienst.kirchensteuer"></label>
+        <label>AV-Beitrag<input data-bind="verdienst.avBeitrag"></label>
+        <label>Solidaritätszuschlag<input data-bind="verdienst.soli"></label>
+        <label>PV-Beitrag<input data-bind="verdienst.pvBeitrag"></label>
+        <label>Steuerfreie Bezüge<input data-bind="verdienst.steuerfreieBezuege"></label>
+        <label>VWL gesamt<input data-bind="verdienst.vwlGesamt"></label>
+        <label>P. verst. Zuk.sich.<input data-bind="verdienst.pVerstZukSich"></label>
+        <label>Kug-Auszahlung<input data-bind="verdienst.kugAuszahlung"></label>
+        <label>Pfändung Rest<input data-bind="verdienst.pfaendungRest"></label>
+        <label>Darlehen Rest<input data-bind="verdienst.darlehenRest"></label>
+      </div>
+
+      <h2>Netto-Bezüge / Netto-Abzüge</h2>
+      <div id="nettoEditor"></div>
+      <div class="toolbar">
+        <button id="btnAddNetto">+ Zeile hinzufügen</button>
+      </div>
+
+      <h2>Bank / Auszahlung</h2>
+      <div class="grid">
+        <label>Bank<input data-bind="bank.name"></label>
+        <label>IBAN / Konto<input data-bind="bank.iban"></label>
+        <label>Code (kleines Feld)<input data-bind="bank.code"></label>
+        <label>SV-AG-Anteil<input data-bind="bank.svAgAnteil"></label>
+        <label>Zus. AG-Kosten<input data-bind="bank.zusAgKosten"></label>
+        <label>Gesamtkosten<input data-bind="bank.gesamtkosten"></label>
+      </div>
+    </section>
     <section class="slip" aria-label="Vorschau">
       <header class="title-row">
         <div>
@@ -875,6 +1044,157 @@
       document.getElementById('fAuszahlung').textContent = formatDE(t.auszahlungsbetrag);
     }
 
+    function getPath(obj, path) {
+      return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+    }
+    function setPath(obj, path, value) {
+      const keys = path.split('.');
+      const last = keys.pop();
+      const target = keys.reduce((o, k) => (o[k] ??= {}), obj);
+      target[last] = value;
+    }
+
+    function bindInputs() {
+      for (const el of document.querySelectorAll('[data-bind]')) {
+        const path = el.dataset.bind;
+        el.value = getPath(state, path) ?? '';
+        el.addEventListener('input', () => {
+          setPath(state, path, el.value);
+          render();
+        });
+      }
+      for (const el of document.querySelectorAll('[data-bind-check]')) {
+        const path = el.dataset.bindCheck;
+        el.checked = !!getPath(state, path);
+        el.addEventListener('change', () => {
+          setPath(state, path, el.checked);
+          render();
+        });
+      }
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderBruttoEditor() {
+      const root = document.getElementById('bruttoEditor');
+      root.innerHTML = '';
+      state.brutto.forEach((r, i) => {
+        const wrap = document.createElement('div');
+        if (r.hinweis) {
+          wrap.className = 'hint-editor';
+          wrap.innerHTML = `
+            <input value="${esc(r.text)}" placeholder="Hinweis-Text">
+            <button class="danger" data-action="del">×</button>
+          `;
+          wrap.querySelector('input').addEventListener('input', e => {
+            r.text = e.target.value; render();
+          });
+        } else {
+          wrap.className = 'row-editor';
+          const fields = ['lohnart','bezeichnung','einheit','menge','faktor','prozent','st','sv','gb'];
+          const placeholders = ['Lohnart','Bezeichnung','Einheit','Menge','Faktor','%','St','SV','GB'];
+          let html = '';
+          fields.forEach((f, idx) => {
+            html += `<input value="${esc(r[f])}" placeholder="${placeholders[idx]}" data-f="${f}">`;
+          });
+          html += `<input value="${esc(formatDE(computeRowBetrag(r)))}" placeholder="Betrag" data-f="betrag">`;
+          html += `<button class="danger" data-action="del">×</button>`;
+          wrap.innerHTML = html;
+          wrap.querySelectorAll('input').forEach(inp => {
+            inp.addEventListener('input', e => {
+              r[e.target.dataset.f] = e.target.value;
+              render();
+            });
+          });
+        }
+        wrap.querySelector('[data-action="del"]').addEventListener('click', () => {
+          state.brutto.splice(i, 1); render();
+        });
+        root.appendChild(wrap);
+      });
+    }
+
+    function renderRowsEditor(rootId, list, fields, placeholders) {
+      const root = document.getElementById(rootId);
+      root.innerHTML = '';
+      list.forEach((r, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'row-editor';
+        let html = '';
+        fields.forEach((f, idx) => {
+          html += `<input value="${esc(r[f])}" placeholder="${placeholders[idx]}" data-f="${f}">`;
+        });
+        html += `<button class="danger" data-action="del">×</button>`;
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('input').forEach(inp => {
+          inp.addEventListener('input', e => {
+            r[e.target.dataset.f] = e.target.value;
+            render();
+          });
+        });
+        wrap.querySelector('[data-action="del"]').addEventListener('click', () => {
+          list.splice(i, 1); render();
+        });
+        root.appendChild(wrap);
+      });
+    }
+
+    function renderEditors() {
+      renderBruttoEditor();
+      renderRowsEditor('steuerEditor', state.steuer,
+        ['tag','steuerBrutto','lohnsteuer','kirchensteuer','soli'],
+        ['Tag (L/N)','Steuer-Brutto','Lohnsteuer','Kirchensteuer','Soli']);
+      renderRowsEditor('svEditor', state.sv,
+        ['tag','kvBrutto','rvBrutto','avBrutto','pvBrutto','kvBeitrag','rvBeitrag','avBeitrag','pvBeitrag'],
+        ['Tag','KV-Bru','RV-Bru','AV-Bru','PV-Bru','KV-Bei','RV-Bei','AV-Bei','PV-Bei']);
+      renderRowsEditor('nettoEditor', state.nettoBezuege,
+        ['lohnart','bezeichnung','betrag'],
+        ['Lohnart','Bezeichnung','Betrag']);
+    }
+
+    function wireToolbar() {
+      document.getElementById('btnAddBrutto').addEventListener('click', () => {
+        state.brutto.push({ lohnart:'', bezeichnung:'', einheit:'Std', menge:'', faktor:'', prozent:'', st:'L', sv:'L', gb:'J' });
+        render();
+      });
+      document.getElementById('btnAddHinweis').addEventListener('click', () => {
+        state.brutto.push({ hinweis: true, text: '' });
+        render();
+      });
+      document.getElementById('btnAddNetto').addEventListener('click', () => {
+        state.nettoBezuege.push({ lohnart:'', bezeichnung:'', betrag:'' });
+        render();
+      });
+      document.getElementById('btnPrint').addEventListener('click', () => window.print());
+      document.getElementById('btnSave').addEventListener('click', saveJson);
+      document.getElementById('btnLoad').addEventListener('click', () => document.getElementById('loadFile').click());
+      document.getElementById('loadFile').addEventListener('change', loadJson);
+    }
+
+    function saveJson() {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gehaltsabrechnung-${state.zeitraum.jahr}-${state.zeitraum.monat}-${state.meta.persNr}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function loadJson(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const data = JSON.parse(text);
+      for (const k of Object.keys(state)) delete state[k];
+      Object.assign(state, data);
+      bindInputs();
+      render();
+      e.target.value = '';
+    }
+
     function render() {
       renderMeta();
       renderEmployerAndAddress();
@@ -882,9 +1202,14 @@
       renderSteuerUndSV();
       renderVerdienst();
       renderFooter();
+      renderEditors();
     }
 
-    document.addEventListener('DOMContentLoaded', render);
+    document.addEventListener('DOMContentLoaded', () => {
+      bindInputs();
+      wireToolbar();
+      render();
+    });
   </script>
 </body>
 </html>
