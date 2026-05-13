@@ -199,6 +199,45 @@
       font-size: 10pt;
       font-weight: 700;
     }
+
+    .slip .ssv-block {
+      margin-top: 4mm;
+    }
+    .slip table.ssv {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--value-size);
+    }
+    .slip table.ssv th {
+      font-weight: 400;
+      font-size: var(--caption-size);
+      text-align: left;
+      border-bottom: 1px solid var(--slip-rule);
+      padding: 0.5mm 1.2mm;
+      color: #333;
+    }
+    .slip table.ssv td {
+      padding: 0.4mm 1.2mm;
+      vertical-align: top;
+    }
+    .slip table.ssv td.num { font-family: var(--mono); text-align: right; }
+    .slip table.ssv td.tag { font-family: var(--mono); font-weight: 700; }
+
+    .slip .ssv-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4mm;
+      align-items: stretch;
+    }
+    .slip .ssv-total {
+      border: 1px solid var(--slip-rule-strong);
+      padding: 1mm 2mm;
+      min-width: 38mm;
+      text-align: right;
+      align-self: end;
+    }
+    .slip .ssv-total .label { font-size: var(--caption-size); display: block; text-align: left; }
+    .slip .ssv-total .value { font-family: var(--mono); font-size: 10pt; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -255,6 +294,50 @@
         <div class="gesamt-cell">
           <span class="label">Gesamt-Brutto</span>
           <span class="value" id="gesamtBruttoCell">0,00</span>
+        </div>
+      </div>
+
+      <div class="ssv-block">
+        <div class="ssv-row">
+          <table class="ssv">
+            <thead>
+              <tr>
+                <th>St⁴</th>
+                <th class="num">Steuer-Brutto</th>
+                <th class="num">Lohnsteuer</th>
+                <th class="num">Kirchensteuer</th>
+                <th class="num">Solidaritätszuschlag</th>
+              </tr>
+            </thead>
+            <tbody id="steuerBody"></tbody>
+          </table>
+          <div class="ssv-total">
+            <span class="label">Steuerrechtliche Abzüge</span>
+            <span class="value" id="steuerTotal">0,00</span>
+          </div>
+        </div>
+
+        <div class="ssv-row" style="margin-top: 3mm;">
+          <table class="ssv">
+            <thead>
+              <tr>
+                <th>SV⁴</th>
+                <th class="num">KV-Brutto</th>
+                <th class="num">RV-Brutto</th>
+                <th class="num">AV-Brutto</th>
+                <th class="num">PV-Brutto</th>
+                <th class="num">KV-Beitrag</th>
+                <th class="num">RV-Beitrag</th>
+                <th class="num">AV-Beitrag</th>
+                <th class="num">PV-Beitrag⁶</th>
+              </tr>
+            </thead>
+            <tbody id="svBody"></tbody>
+          </table>
+          <div class="ssv-total">
+            <span class="label">SV-rechtliche Abzüge</span>
+            <span class="value" id="svTotal">0,00</span>
+          </div>
         </div>
       </div>
     </section>
@@ -513,10 +596,47 @@
       document.getElementById('gesamtBruttoCell').textContent = formatDE(totals.gesamtBrutto);
     }
 
+    function renderSteuerUndSV() {
+      const sbody = document.getElementById('steuerBody');
+      sbody.innerHTML = '';
+      for (const r of state.steuer) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="tag">${r.tag}</td>
+          <td class="num">${r.steuerBrutto ?? ''}</td>
+          <td class="num">${r.lohnsteuer ?? ''}</td>
+          <td class="num">${r.kirchensteuer ?? ''}</td>
+          <td class="num">${r.soli ?? ''}</td>
+        `;
+        sbody.appendChild(tr);
+      }
+      const vbody = document.getElementById('svBody');
+      vbody.innerHTML = '';
+      for (const r of state.sv) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="tag">${r.tag}</td>
+          <td class="num">${r.kvBrutto ?? ''}</td>
+          <td class="num">${r.rvBrutto ?? ''}</td>
+          <td class="num">${r.avBrutto ?? ''}</td>
+          <td class="num">${r.pvBrutto ?? ''}</td>
+          <td class="num">${r.kvBeitrag ?? ''}</td>
+          <td class="num">${r.rvBeitrag ?? ''}</td>
+          <td class="num">${r.avBeitrag ?? ''}</td>
+          <td class="num">${r.pvBeitrag ?? ''}</td>
+        `;
+        vbody.appendChild(tr);
+      }
+      const t = computeTotals(state);
+      document.getElementById('steuerTotal').textContent = formatDE(t.steuerAbzuege);
+      document.getElementById('svTotal').textContent = formatDE(t.svAbzuege);
+    }
+
     function render() {
       renderMeta();
       renderEmployerAndAddress();
       renderBrutto();
+      renderSteuerUndSV();
     }
 
     document.addEventListener('DOMContentLoaded', render);
