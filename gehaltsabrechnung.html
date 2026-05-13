@@ -501,6 +501,64 @@
         <button class="secondary" id="btnAddHinweis">+ Hinweis hinzufügen</button>
       </div>
 
+      <h2>Automatik (Steuer + SV)</h2>
+      <div style="background:#fff5d4;border:1px solid #e0c060;padding:8px;border-radius:3px;margin-bottom:10px;font-size:11px;line-height:1.4;">
+        <strong>Achtung — Näherungswert.</strong> Diese Berechnung approximiert das BMF-Programmablaufplan 2024.
+        Werte können von DATEV/Lexware um wenige Euro abweichen. Vor Abgabe verifizieren.
+        Steuerklassen 5 und 6 sind grobe Approximationen.
+      </div>
+      <div class="grid">
+        <label><input type="checkbox" data-bind-check="automatik.enabled"> Automatik aktivieren (L-Zeile)</label>
+        <span></span>
+        <label>Steuerklasse
+          <select data-bind="automatik.steuerklasse">
+            <option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option>
+            <option value="5">5</option><option value="6">6</option>
+          </select>
+        </label>
+        <label>Faktor (nur StKl 4)<input data-bind="automatik.faktor" placeholder="z.B. 0,8500"></label>
+        <label>Konfession
+          <select data-bind="automatik.konfession">
+            <option value="">keine</option>
+            <option value="ev">evangelisch</option>
+            <option value="rk">römisch-katholisch</option>
+            <option value="ak">altkatholisch</option>
+          </select>
+        </label>
+        <label>Bundesland
+          <select data-bind="automatik.bundesland">
+            <option value="BW">Baden-Württemberg (KSt 8%)</option>
+            <option value="BY">Bayern (KSt 8%)</option>
+            <option value="BE">Berlin</option>
+            <option value="BB">Brandenburg</option>
+            <option value="HB">Bremen</option>
+            <option value="HH">Hamburg</option>
+            <option value="HE">Hessen</option>
+            <option value="MV">Mecklenburg-Vorpommern</option>
+            <option value="NI">Niedersachsen</option>
+            <option value="NW">Nordrhein-Westfalen</option>
+            <option value="RP">Rheinland-Pfalz</option>
+            <option value="SL">Saarland</option>
+            <option value="SN">Sachsen (PV-Sonderregel)</option>
+            <option value="ST">Sachsen-Anhalt</option>
+            <option value="SH">Schleswig-Holstein</option>
+            <option value="TH">Thüringen</option>
+          </select>
+        </label>
+        <label>Freibetrag mtl. (EUR)<input data-bind="automatik.freibetragMonatlich" placeholder="0,00"></label>
+        <label>KK-Zusatzbeitrag (%)<input data-bind="automatik.kkZusatzbeitrag" placeholder="1,70"></label>
+        <label>Kinder unter 25<input type="number" min="0" data-bind="automatik.kinder"></label>
+        <label>Alter<input type="number" min="0" data-bind="automatik.age"></label>
+        <label><input type="checkbox" data-bind-check="automatik.midijob"> Midijob (Brutto in 538-2000)</label>
+        <label>West/Ost
+          <select data-bind="automatik.westOst">
+            <option value="W">West (BBG RV/AV 7.550 €/Mon.)</option>
+            <option value="O">Ost (BBG RV/AV 7.450 €/Mon.)</option>
+          </select>
+        </label>
+      </div>
+
       <h2>Steuer (manuelle Eingabe)</h2>
       <div id="steuerEditor"></div>
 
@@ -824,6 +882,158 @@
     }
     // ===== End of inlined calc.mjs =====
 
+    // ===== Inlined from tests/sv.mjs — keep in sync =====
+    const SV_RATES_2024 = {
+      kv_general: 0.146, rv: 0.186, av: 0.026, pv_base: 0.034,
+      pv_zuschlag_kinderlos: 0.006, pv_abschlag_per_kind: 0.0025, pv_abschlag_max_kids: 4,
+      sachsen_pv_an_shift: 0.005,
+      bbg_kv_pv_month: 5175.00, bbg_rv_av_west_month: 7550.00, bbg_rv_av_ost_month: 7450.00,
+      midijob_untergrenze: 538.01, midijob_obergrenze: 2000.00, midijob_F: 0.6700,
+    };
+    function pvAnRate({ kinder, age = 30, bundesland = '' } = {}) {
+      const R = SV_RATES_2024;
+      let rate = R.pv_base / 2;
+      if (age >= 23 && (kinder || 0) === 0) rate += R.pv_zuschlag_kinderlos;
+      else if (kinder >= 2) {
+        const deductions = Math.min(kinder - 1, R.pv_abschlag_max_kids);
+        rate -= R.pv_abschlag_per_kind * deductions;
+      }
+      if (bundesland === 'SN') rate += R.sachsen_pv_an_shift;
+      return Math.round(rate * 1e6) / 1e6;
+    }
+    function midijobRedBmg(brutto) {
+      const R = SV_RATES_2024;
+      const U = R.midijob_untergrenze, O = R.midijob_obergrenze, F = R.midijob_F;
+      if (brutto < U || brutto > O) return brutto;
+      return Math.round((F * U + ((O - F * U) / (O - U)) * (brutto - U)) * 100) / 100;
+    }
+    function calculateSV(p) {
+      const R = SV_RATES_2024;
+      const brutto = +p.brutto;
+      const kinder = +p.kinder || 0;
+      const kkZusatz = p.kkZusatzbeitrag != null ? +p.kkZusatzbeitrag : 0.017;
+      const isOst = p.westOst === 'O';
+      const bbgKvPv = R.bbg_kv_pv_month;
+      const bbgRvAv = isOst ? R.bbg_rv_av_ost_month : R.bbg_rv_av_west_month;
+      const kvBrutto = Math.min(brutto, bbgKvPv);
+      const pvBrutto = Math.min(brutto, bbgKvPv);
+      const rvBrutto = Math.min(brutto, bbgRvAv);
+      const avBrutto = Math.min(brutto, bbgRvAv);
+      const useMidijob = !!p.midijob && brutto >= R.midijob_untergrenze && brutto <= R.midijob_obergrenze;
+      const anKvBase = useMidijob ? midijobRedBmg(kvBrutto) : kvBrutto;
+      const anPvBase = useMidijob ? midijobRedBmg(pvBrutto) : pvBrutto;
+      const anRvBase = useMidijob ? midijobRedBmg(rvBrutto) : rvBrutto;
+      const anAvBase = useMidijob ? midijobRedBmg(avBrutto) : avBrutto;
+      const anKvRate = R.kv_general / 2 + kkZusatz / 2;
+      const anRvRate = R.rv / 2;
+      const anAvRate = R.av / 2;
+      const anPvRate = pvAnRate({ kinder, age: p.age, bundesland: p.bundesland });
+      const kvBeitrag = Math.round(anKvBase * anKvRate * 100) / 100;
+      const rvBeitrag = Math.round(anRvBase * anRvRate * 100) / 100;
+      const avBeitrag = Math.round(anAvBase * anAvRate * 100) / 100;
+      const pvBeitrag = Math.round(anPvBase * anPvRate * 100) / 100;
+      return { kvBrutto, rvBrutto, avBrutto, pvBrutto, kvBeitrag, rvBeitrag, avBeitrag, pvBeitrag };
+    }
+    // ===== End of inlined sv.mjs =====
+
+    // ===== Inlined from tests/lohnsteuer.mjs — keep in sync =====
+    const TAX_CONSTANTS_2024 = {
+      grundfreibetrag: 11604, werbungskostenpauschbetrag: 1230, sonderausgabenpauschbetrag: 36,
+      entlastungsbetrag_alleinerziehende: 4260,
+      tarif_eckwerte: [11604, 17005, 66760, 277825],
+      tarif_progressiv_1_a: 922.98, tarif_progressiv_1_b: 1400,
+      tarif_progressiv_2_a: 181.19, tarif_progressiv_2_b: 2397, tarif_progressiv_2_c: 1025.38,
+      tarif_linear_1_rate: 0.42, tarif_linear_1_subtract: 10602.13,
+      tarif_linear_2_rate: 0.45, tarif_linear_2_subtract: 18936.88,
+      soli_rate: 0.055, soli_freigrenze_normal: 18130, soli_freigrenze_stkl3: 36260,
+      soli_milderungs_rate: 0.119,
+      vorsorge_rv_an_rate: 0.093, vorsorge_kv_avg_rate: 0.0815, vorsorge_pv_rate: 0.017,
+      bbg_kv_pv_year: 62100, bbg_rv_av_west_year: 90600, bbg_rv_av_ost_year: 89400,
+    };
+    function einkommensteuer(zvE) {
+      const T = TAX_CONSTANTS_2024;
+      if (zvE <= T.tarif_eckwerte[0]) return 0;
+      if (zvE <= T.tarif_eckwerte[1]) {
+        const y = (zvE - T.tarif_eckwerte[0]) / 10000;
+        return Math.floor((T.tarif_progressiv_1_a * y + T.tarif_progressiv_1_b) * y);
+      }
+      if (zvE <= T.tarif_eckwerte[2]) {
+        const z = (zvE - T.tarif_eckwerte[1]) / 10000;
+        return Math.floor((T.tarif_progressiv_2_a * z + T.tarif_progressiv_2_b) * z + T.tarif_progressiv_2_c);
+      }
+      if (zvE <= T.tarif_eckwerte[3]) return Math.floor(T.tarif_linear_1_rate * zvE - T.tarif_linear_1_subtract);
+      return Math.floor(T.tarif_linear_2_rate * zvE - T.tarif_linear_2_subtract);
+    }
+    function _vorsorgepauschale(annualBrutto) {
+      const T = TAX_CONSTANTS_2024;
+      const rvBase = Math.min(annualBrutto, T.bbg_rv_av_west_year);
+      const kvBase = Math.min(annualBrutto, T.bbg_kv_pv_year);
+      return rvBase * T.vorsorge_rv_an_rate + kvBase * T.vorsorge_kv_avg_rate + kvBase * T.vorsorge_pv_rate;
+    }
+    function _zvE({ annualBrutto, steuerklasse, jahresfreibetrag = 0 }) {
+      const T = TAX_CONSTANTS_2024;
+      let zvE = annualBrutto;
+      zvE -= T.werbungskostenpauschbetrag;
+      zvE -= T.sonderausgabenpauschbetrag;
+      zvE -= _vorsorgepauschale(annualBrutto);
+      if (steuerklasse === 2) zvE -= T.entlastungsbetrag_alleinerziehende;
+      zvE -= jahresfreibetrag;
+      return Math.max(0, Math.floor(zvE));
+    }
+    function jahresLohnsteuer({ annualBrutto, steuerklasse, faktor, jahresfreibetrag = 0 }) {
+      const T = TAX_CONSTANTS_2024;
+      const sk = +steuerklasse || 1;
+      if (sk === 3) {
+        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
+        return 2 * einkommensteuer(Math.floor(zvE / 2));
+      }
+      if (sk === 5) {
+        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
+        const a = einkommensteuer(Math.floor(zvE * 1.25));
+        const b = einkommensteuer(Math.floor(zvE * 0.75));
+        return Math.max(0, a - b);
+      }
+      if (sk === 6) {
+        const zvE = _zvE({ annualBrutto, steuerklasse: 1, jahresfreibetrag });
+        return einkommensteuer(zvE + T.grundfreibetrag);
+      }
+      const zvE = _zvE({ annualBrutto, steuerklasse: sk, jahresfreibetrag });
+      let tax = einkommensteuer(zvE);
+      if (sk === 4 && faktor && faktor > 0 && faktor < 1) tax = Math.floor(tax * faktor);
+      return tax;
+    }
+    function jahresSoli({ jahresLst, steuerklasse }) {
+      const T = TAX_CONSTANTS_2024;
+      const sk = +steuerklasse || 1;
+      const freigrenze = sk === 3 ? T.soli_freigrenze_stkl3 : T.soli_freigrenze_normal;
+      if (jahresLst <= freigrenze) return 0;
+      const full = jahresLst * T.soli_rate;
+      const milderung = (jahresLst - freigrenze) * T.soli_milderungs_rate;
+      return Math.min(full, milderung);
+    }
+    function kirchensteuerRate({ bundesland, konfession }) {
+      if (!konfession || konfession === '--' || konfession === 'ka') return 0;
+      return (bundesland === 'BY' || bundesland === 'BW') ? 0.08 : 0.09;
+    }
+    function calculateLohnsteuer(p) {
+      const brutto = +p.brutto;
+      const steuerklasse = +p.steuerklasse || 1;
+      const freibetragMonatlich = +p.freibetragMonatlich || 0;
+      const jahresfreibetrag = freibetragMonatlich * 12;
+      const annualBrutto = brutto * 12;
+      const jLst = jahresLohnsteuer({ annualBrutto, steuerklasse, faktor: p.faktor, jahresfreibetrag });
+      const jSoli = jahresSoli({ jahresLst: jLst, steuerklasse });
+      const kStRate = kirchensteuerRate({ bundesland: p.bundesland, konfession: p.konfession });
+      const jKst = jLst * kStRate;
+      return {
+        lohnsteuer: Math.round((jLst / 12) * 100) / 100,
+        soli: Math.round((jSoli / 12) * 100) / 100,
+        kirchensteuer: Math.round((jKst / 12) * 100) / 100,
+        steuerBrutto: brutto,
+      };
+    }
+    // ===== End of inlined lohnsteuer.mjs =====
+
     const state = {
       meta: {
         persNr: '00107', geburtsdatum: '021097', stKl: '1', faktor: '',
@@ -878,6 +1088,19 @@
         code: '32946',
       },
       hinweiseZurAbrechnung: '',
+      automatik: {
+        enabled: false,
+        steuerklasse: 1,
+        faktor: '',
+        konfession: '',
+        bundesland: 'BE',
+        freibetragMonatlich: '',
+        kkZusatzbeitrag: '1,70',
+        kinder: 0,
+        age: 30,
+        midijob: false,
+        westOst: 'W',
+      },
     };
 
     function renderMeta() {
