@@ -147,6 +147,58 @@
       white-space: pre-wrap;
       min-height: 12mm;
     }
+
+    .slip .section-heading {
+      font-size: 8pt;
+      font-weight: 700;
+      margin: 4mm 0 1mm 0;
+    }
+
+    .slip table.brutto {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--value-size);
+    }
+    .slip table.brutto th {
+      font-weight: 400;
+      font-size: var(--caption-size);
+      text-align: left;
+      border-bottom: 1px solid var(--slip-rule);
+      padding: 0.5mm 1.2mm;
+      color: #333;
+    }
+    .slip table.brutto td {
+      padding: 0.4mm 1.2mm;
+      vertical-align: top;
+    }
+    .slip table.brutto td.num { font-family: var(--mono); text-align: right; }
+    .slip table.brutto tr.hinweis td {
+      font-style: italic;
+      color: #333;
+      padding-left: 22mm;
+    }
+
+    .slip .brutto-footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      margin-top: 3mm;
+    }
+    .slip .brutto-footer .gesamt-cell {
+      border: 1px solid var(--slip-rule-strong);
+      padding: 1mm 2mm;
+      min-width: 38mm;
+      text-align: right;
+    }
+    .slip .brutto-footer .gesamt-cell .label {
+      font-size: var(--caption-size);
+      display: block;
+      text-align: left;
+    }
+    .slip .brutto-footer .gesamt-cell .value {
+      font-family: var(--mono);
+      font-size: 10pt;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -176,6 +228,33 @@
         <div class="hinweise">
           <div class="heading">Hinweise zur Abrechnung</div>
           <div class="body" id="hinweiseBody"></div>
+        </div>
+      </div>
+
+      <div class="section-heading">Brutto-Bezüge</div>
+      <table class="brutto" id="bruttoTable">
+        <thead>
+          <tr>
+            <th>Lohnart</th>
+            <th>Bezeichnung</th>
+            <th>Einheit²</th>
+            <th class="num">Menge³</th>
+            <th class="num">Faktor³</th>
+            <th class="num">Prozentsatz</th>
+            <th>St⁴</th>
+            <th>SV⁴</th>
+            <th>GB⁵</th>
+            <th class="num">Betrag</th>
+          </tr>
+        </thead>
+        <tbody id="bruttoBody"></tbody>
+      </table>
+
+      <div class="brutto-footer">
+        <div></div>
+        <div class="gesamt-cell">
+          <span class="label">Gesamt-Brutto</span>
+          <span class="value" id="gesamtBruttoCell">0,00</span>
         </div>
       </div>
     </section>
@@ -405,9 +484,39 @@
       document.getElementById('hinweiseBody').textContent = state.hinweiseZurAbrechnung;
     }
 
+    function renderBrutto() {
+      const body = document.getElementById('bruttoBody');
+      body.innerHTML = '';
+      for (const r of state.brutto) {
+        const tr = document.createElement('tr');
+        if (r.hinweis) {
+          tr.className = 'hinweis';
+          tr.innerHTML = `<td colspan="10">${r.text || ''}</td>`;
+        } else {
+          const betrag = computeRowBetrag(r);
+          tr.innerHTML = `
+            <td>${r.lohnart ?? ''}</td>
+            <td>${r.bezeichnung ?? ''}</td>
+            <td>${r.einheit ?? ''}</td>
+            <td class="num">${r.menge ?? ''}</td>
+            <td class="num">${r.faktor ?? ''}</td>
+            <td class="num">${r.prozent ?? ''}</td>
+            <td>${r.st ?? ''}</td>
+            <td>${r.sv ?? ''}</td>
+            <td>${r.gb ?? ''}</td>
+            <td class="num">${formatDE(betrag)}</td>
+          `;
+        }
+        body.appendChild(tr);
+      }
+      const totals = computeTotals(state);
+      document.getElementById('gesamtBruttoCell').textContent = formatDE(totals.gesamtBrutto);
+    }
+
     function render() {
       renderMeta();
       renderEmployerAndAddress();
+      renderBrutto();
     }
 
     document.addEventListener('DOMContentLoaded', render);
