@@ -5,14 +5,112 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gehaltsabrechnung</title>
   <style>
-    /* CSS will be added in later tasks */
-    body { font-family: Arial, Helvetica, sans-serif; margin: 0; }
+    :root {
+      --slip-fg: #111;
+      --slip-rule: #888;
+      --slip-rule-strong: #333;
+      --slip-bg: #fff;
+      --caption-size: 7pt;
+      --value-size: 9.5pt;
+      --mono: Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: Arial, Helvetica, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #e6e8eb; }
+    body { font-family: var(--sans); color: var(--slip-fg); }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) 210mm;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .form-panel {
+      background: #fff;
+      padding: 16px;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+    }
+
+    .slip {
+      background: var(--slip-bg);
+      width: 210mm;
+      min-height: 297mm;
+      padding: 10mm 10mm 8mm 10mm;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      font-size: var(--value-size);
+      color: var(--slip-fg);
+    }
+
+    .slip .caption { font-size: var(--caption-size); color: #444; }
+    .slip .num     { font-family: var(--mono); text-align: right; }
+
+    .slip .title-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 8mm;
+      margin-bottom: 2mm;
+    }
+    .slip .title-row h1 {
+      font-size: 11pt;
+      margin: 0;
+      font-weight: 700;
+    }
+    .slip .title-row .period {
+      font-size: 10pt;
+      margin-left: 4mm;
+    }
+    .slip .roc-block {
+      font-family: var(--mono);
+      font-size: 9pt;
+      text-align: right;
+      line-height: 1.2;
+    }
+    .slip .roc-block .roc-line { letter-spacing: .5px; }
+    .slip .roc-block .date-line { margin-top: 1.5mm; }
+
+    .slip .meta-grid {
+      display: grid;
+      border: 1px solid var(--slip-rule);
+      font-size: var(--caption-size);
+    }
+    .slip .meta-grid .cell {
+      border: 1px solid var(--slip-rule);
+      padding: 0.6mm 1.2mm;
+      min-height: 7mm;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 0.5mm;
+    }
+    .slip .meta-grid .cell .label { font-size: var(--caption-size); color: #333; }
+    .slip .meta-grid .cell .value { font-family: var(--mono); font-size: var(--value-size); }
+    .slip .meta-grid .row {
+      display: grid;
+      grid-template-columns: var(--cols, repeat(11, 1fr));
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <section class="form-panel" aria-label="Eingabe"></section>
-    <section class="slip" aria-label="Vorschau"></section>
+    <section class="slip" aria-label="Vorschau">
+      <header class="title-row">
+        <div>
+          <h1>Abrechnung der Brutto/Netto-Bezüge<span class="period" id="periodLabel"></span></h1>
+        </div>
+        <div class="roc-block">
+          <div class="roc-line"><span id="rocCode"></span>&nbsp;&nbsp;<span id="mandant"></span></div>
+          <div class="date-line"><span id="druckdatum"></span>&nbsp;&nbsp;Blatt&nbsp;<span id="blatt"></span></div>
+        </div>
+      </header>
+
+      <div class="meta-grid" id="metaGrid"></div>
+    </section>
   </div>
   <script>
     // ===== Inlined from tests/calc.mjs - keep in sync (Task 15 verifies) =====
@@ -154,9 +252,80 @@
       hinweiseZurAbrechnung: '',
     };
 
+    function renderMeta() {
+      const m = state.meta;
+      const z = state.zeitraum;
+      document.getElementById('periodLabel').textContent = ` für ${z.monat} ${z.jahr}`;
+      document.getElementById('rocCode').textContent = m.rocCode;
+      document.getElementById('mandant').textContent = m.mandant;
+      document.getElementById('druckdatum').textContent = m.druckdatum;
+      document.getElementById('blatt').textContent = m.blatt;
+
+      const grid = document.getElementById('metaGrid');
+      grid.innerHTML = '';
+
+      const rows = [
+        {
+          cols: '0.9fr 1.1fr 0.5fr 0.6fr 0.7fr 0.9fr 1fr 1fr 0.5fr 0.7fr 0.5fr',
+          cells: [
+            ['Personal-Nr.', m.persNr],
+            ['Geburtsdatum', m.geburtsdatum],
+            ['StKl', m.stKl],
+            ['Faktor', m.faktor],
+            ['Ki.Frbtr', m.kiFrbtr],
+            ['Konfession', m.konfession],
+            ['Freibetrag jährl.¹', m.freibetragJ],
+            ['Freibetrag mtl.¹', m.freibetragM],
+            ['DBA', m.dba],
+            ['Midijob', m.midijob],
+            ['St-Tg', m.stTg],
+          ],
+        },
+        {
+          cols: '1.4fr 2.4fr 0.6fr 0.6fr 0.6fr 0.6fr',
+          cells: [
+            ['SV-Nummer', m.svNummer],
+            ['Krankenkasse', m.krankenkasse],
+            ['KK % ⁸', m.kkProzent],
+            ['PGRS', m.pgrs],
+            ['BGRS', m.bgrs],
+            ['Um.SV-Tg', m.umSvTg],
+          ],
+        },
+        {
+          cols: '0.7fr 0.7fr 4fr',
+          cells: [
+            ['Eintritt', m.eintritt],
+            ['Austritt', m.austritt],
+            ['', ''],
+          ],
+        },
+        {
+          cols: '1.4fr 0.6fr 4fr',
+          cells: [
+            ['Steuer-ID', m.steuerId],
+            ['MFB⁷', m.mfb],
+            ['', ''],
+          ],
+        },
+      ];
+
+      for (const r of rows) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'row';
+        rowEl.style.setProperty('--cols', r.cols);
+        for (const [label, value] of r.cells) {
+          const c = document.createElement('div');
+          c.className = 'cell';
+          c.innerHTML = `<span class="label">${label}</span><span class="value">${value ?? ''}</span>`;
+          rowEl.appendChild(c);
+        }
+        grid.appendChild(rowEl);
+      }
+    }
+
     function render() {
-      // Wired up section by section in later tasks.
-      console.log('totals ->', computeTotals(state));
+      renderMeta();
     }
 
     document.addEventListener('DOMContentLoaded', render);
