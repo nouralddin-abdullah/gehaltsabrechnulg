@@ -23,3 +23,24 @@ export function formatDE(n) {
   if (n == null || !Number.isFinite(n)) return '';
   return _fmt.format(n);
 }
+
+export function computeRowBetrag(row) {
+  if (row.hinweis) return null;
+  const explicit = parseDE(row.betrag);
+  if (explicit != null) return explicit;
+  const menge = parseDE(row.menge);
+  const faktor = parseDE(row.faktor);
+  if (menge == null || faktor == null) return null;
+  return Math.round(menge * faktor * 100) / 100;
+}
+
+export function sumBrutto(rows) {
+  let total = 0;
+  for (const r of rows) {
+    if (r.hinweis) continue;
+    if ((r.gb || '').toUpperCase() !== 'J') continue;
+    const b = computeRowBetrag(r);
+    if (b != null) total += b;
+  }
+  return Math.round(total * 100) / 100;
+}
