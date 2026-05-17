@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseDE, formatDE,
   computeRowBetrag, sumBrutto,
+  sumSteuerBrutto, sumSVBrutto,
   sumSteuerAbzuege, sumSVAbzuege,
   computeTotals,
 } from './calc.mjs';
@@ -99,6 +100,30 @@ test('sumBrutto: only GB=J rows are summed', () => {
 
 test('sumBrutto: empty list -> 0', () => {
   assert.equal(sumBrutto([]), 0);
+});
+
+test('sumSteuerBrutto / sumSVBrutto: zvoove 03/2026 reference rows', () => {
+  const rows = [
+    { menge: '119,00', faktor: '16,69', st: 'L', sv: 'L', gb: 'J' },
+    { menge: '8,00',   faktor: '3,31',  st: 'L', sv: 'L', gb: 'J' },
+    { menge: '102,08', faktor: '3,31',  st: 'L', sv: 'L', gb: 'J' },
+    { menge: '1,08',   faktor: '0,00',  st: 'F', sv: 'F', gb: 'J' },
+    { menge: '15,00',  faktor: '2,50',  st: 'F', sv: 'F', gb: 'J' },
+    { menge: '7,00',   faktor: '0,00',  st: 'F', sv: 'F', gb: 'J' },
+    { menge: '28,00',  faktor: '16,69', st: 'L', sv: 'L', gb: 'J' },
+  ];
+  assert.equal(sumBrutto(rows),        2855.29);
+  assert.equal(sumSteuerBrutto(rows),  2817.79);
+  assert.equal(sumSVBrutto(rows),      2817.79);
+});
+
+test('sumSteuerBrutto: st="F" rows are excluded even if gb="J"', () => {
+  const rows = [
+    { menge: '100', faktor: '1,00', st: 'L', sv: 'L', gb: 'J' },
+    { menge: '50',  faktor: '1,00', st: 'F', sv: 'L', gb: 'J' },
+  ];
+  assert.equal(sumSteuerBrutto(rows), 100);
+  assert.equal(sumSVBrutto(rows), 150);
 });
 
 test('sumSteuerAbzuege: reference PDF L+N rows = 521', () => {

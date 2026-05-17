@@ -31,15 +31,27 @@ export function computeRowBetrag(row) {
   return Math.round(menge * faktor * 100) / 100;
 }
 
-export function sumBrutto(rows) {
+function _sumBruttoBy(rows, predicate) {
   let total = 0;
   for (const r of rows) {
     if (r.hinweis) continue;
-    if ((r.gb || '').toUpperCase() !== 'J') continue;
+    if (!predicate(r)) continue;
     const b = computeRowBetrag(r);
     if (b != null) total += b;
   }
   return Math.round(total * 100) / 100;
+}
+
+export function sumBrutto(rows) {
+  return _sumBruttoBy(rows, r => (r.gb || '').toUpperCase() === 'J');
+}
+
+export function sumSteuerBrutto(rows) {
+  return _sumBruttoBy(rows, r => /^[LE]$/i.test(r.st || ''));
+}
+
+export function sumSVBrutto(rows) {
+  return _sumBruttoBy(rows, r => /^[LE]$/i.test(r.sv || ''));
 }
 
 function _sumFields(rows, fields) {

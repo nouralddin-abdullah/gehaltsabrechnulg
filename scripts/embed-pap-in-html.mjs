@@ -1,24 +1,23 @@
+import fs from "node:fs";
+import { execSync } from "node:child_process";
 
+const HTML = "gehaltsabrechnung.html";
+const html = fs.readFileSync(HTML, "utf8");
 
-import fs from 'node:fs';
-import { execSync } from 'node:child_process';
-
-const HTML = 'gehaltsabrechnung.html';
-const html = fs.readFileSync(HTML, 'utf8');
-
-const startMarker = '    // ===== Inlined from tests/lohnsteuer.mjs — keep in sync =====';
-const endMarker = '    // ===== End of inlined lohnsteuer.mjs =====';
+const startMarker =
+  "    // ===== Inlined from tests/lohnsteuer.mjs — keep in sync =====";
+const endMarker = "    // ===== End of inlined lohnsteuer.mjs =====";
 
 const startIdx = html.indexOf(startMarker);
 const endIdx = html.indexOf(endMarker);
 if (startIdx < 0 || endIdx < 0) {
-  console.error('Markers not found in HTML');
+  console.error("Markers not found in HTML");
   process.exit(1);
 }
 const before = html.slice(0, startIdx);
 const after = html.slice(endIdx + endMarker.length);
 
-const inline = execSync('node scripts/inline-pap.mjs').toString('utf8');
+const inline = execSync("node scripts/inline-pap.mjs").toString("utf8");
 
 const adapter = `
     const BUNDESLAND_KSTRATE = {
@@ -56,11 +55,19 @@ const adapter = `
       return { lohnsteuer, soli, kirchensteuer, steuerBrutto: +p.brutto };
     }`;
 
-const indented = inline.split('\n').map(l => l ? '    ' + l : l).join('\n');
+const indented = inline
+  .split("\n")
+  .map((l) => (l ? "    " + l : l))
+  .join("\n");
 
-const newBlock = startMarker + '\n' + indented + adapter + '\n' + endMarker;
+const newBlock = startMarker + "\n" + indented + adapter + "\n" + endMarker;
 const newHtml = before + newBlock + after;
 
 fs.writeFileSync(HTML, newHtml);
-console.log('Embedded. Old block:', endIdx + endMarker.length - startIdx, 'bytes ->',
-  newBlock.length, 'bytes');
+console.log(
+  "Embedded. Old block:",
+  endIdx + endMarker.length - startIdx,
+  "bytes ->",
+  newBlock.length,
+  "bytes",
+);

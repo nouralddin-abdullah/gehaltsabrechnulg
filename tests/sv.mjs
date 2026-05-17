@@ -1,11 +1,10 @@
 
 
-export const SV_RATES_2024 = {
-
+export const SV_RATES_2026 = {
   kv_general: 0.146,
   rv:         0.186,
   av:         0.026,
-  pv_base:    0.034,
+  pv_base:    0.036,
 
   pv_zuschlag_kinderlos: 0.006,
   pv_abschlag_per_kind:  0.0025,
@@ -13,14 +12,16 @@ export const SV_RATES_2024 = {
 
   sachsen_pv_an_shift: 0.005,
 
-  bbg_kv_pv_month:      5175.00,
-  bbg_rv_av_west_month: 7550.00,
-  bbg_rv_av_ost_month:  7450.00,
+  bbg_kv_pv_month:      5812.50,
+  bbg_rv_av_west_month: 8450.00,
+  bbg_rv_av_ost_month:  8450.00,
 
-  midijob_untergrenze: 538.01,
+  midijob_untergrenze: 603.01,
   midijob_obergrenze:  2000.00,
 
   midijob_F: 0.6700,
+
+  kkZusatzbeitragDurchschnitt: 0.029,
 };
 
 function _capMonthly(brutto, bbg) {
@@ -28,7 +29,7 @@ function _capMonthly(brutto, bbg) {
 }
 
 export function pvAnRate({ kinder, age = 30, bundesland = '' } = {}) {
-  const R = SV_RATES_2024;
+  const R = SV_RATES_2026;
   let rate = R.pv_base / 2;
   if (age >= 23 && (kinder || 0) === 0) {
     rate += R.pv_zuschlag_kinderlos;
@@ -42,8 +43,8 @@ export function pvAnRate({ kinder, age = 30, bundesland = '' } = {}) {
   return Math.round(rate * 1e6) / 1e6;
 }
 
-export function midijobRedBmg(brutto, year = 2024) {
-  const R = SV_RATES_2024;
+export function midijobRedBmg(brutto, year = 2026) {
+  const R = SV_RATES_2026;
   const U = R.midijob_untergrenze;
   const O = R.midijob_obergrenze;
   const F = R.midijob_F;
@@ -54,10 +55,10 @@ export function midijobRedBmg(brutto, year = 2024) {
 }
 
 export function calculateSV(p) {
-  const R = SV_RATES_2024;
+  const R = SV_RATES_2026;
   const brutto = +p.brutto;
   const kinder = +p.kinder || 0;
-  const kkZusatz = p.kkZusatzbeitrag != null ? +p.kkZusatzbeitrag : 0.017;
+  const kkZusatz = p.kkZusatzbeitrag != null ? +p.kkZusatzbeitrag : R.kkZusatzbeitragDurchschnitt;
   const isOst = p.westOst === 'O';
 
   const bbgKvPv = R.bbg_kv_pv_month;

@@ -2,6 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateLohnsteuer } from './lohnsteuer.mjs';
 
+test('Lohnsteuer: matches zvoove 03/2026 reference payslip', () => {
+  const r = calculateLohnsteuer({
+    brutto: 2817.79, steuerklasse: 1, year: 2026,
+    kkZusatzbeitrag: 0.0269, kinderlos: true,
+  });
+  assert.equal(r.lohnsteuer, 254.58);
+  assert.equal(r.soli, 0);
+  assert.equal(r.kirchensteuer, 0);
+});
+
 test('Lohnsteuer: 0 below Grundfreibetrag (Brutto 500)', () => {
   const r = calculateLohnsteuer({ brutto: 500, steuerklasse: 1, kkZusatzbeitrag: 0.017 });
   assert.equal(r.lohnsteuer, 0);
