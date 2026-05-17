@@ -1,22 +1,4 @@
-// Generic interpreter for the BMF Lohnsteuer-Programmablaufplan (PAP) XML.
-//
-// The BMF publishes a yearly PAP as XML. This module parses that XML and
-// executes it against a set of INPUT values (Brutto, Steuerklasse, etc.) to
-// produce the official outputs (LSTLZZ = Lohnsteuer in cents, SOLZLZZ = Soli,
-// BK = Bemessungsgrundlage Kirchensteuer, …).
-//
-// Why interpret instead of hand-translate: the PAP changes every January, and
-// hand-translating the ~50 methods is error-prone. Interpreting the XML means
-// the engine auto-updates when we drop in the new year's file.
-//
-// Numeric model: we use Number, not BigDecimal. The PAP uses BigDecimal so its
-// rounding boundaries are deterministic. We mimic this by faithfully applying
-// setScale() and divide(scale, mode) at every rounding boundary the PAP
-// specifies. Sub-cent errors can creep in, but the published Lohnsteuer values
-// are integer EUR for the year (LSTLZZ is in cents), so rounding at boundaries
-// keeps us within ±1 cent of BMF.
-//
-// Reference XML format: https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml
+
 
 const ROUND_DOWN = 'DOWN', ROUND_UP = 'UP', ROUND_HALF_UP = 'HALF_UP', ROUND_UNNECESSARY = 'UN';
 
@@ -27,7 +9,7 @@ function _scale(n, scale, mode) {
   if (mode === ROUND_DOWN) result = scaled >= 0 ? Math.floor(scaled) : Math.ceil(scaled);
   else if (mode === ROUND_UP) result = scaled >= 0 ? Math.ceil(scaled) : Math.floor(scaled);
   else if (mode === ROUND_HALF_UP) result = Math.sign(scaled) * Math.floor(Math.abs(scaled) + 0.5);
-  else result = scaled; // ROUND_UNNECESSARY etc.
+  else result = scaled;
   return result / factor;
 }
 
@@ -44,20 +26,6 @@ const _api = {
   ROUND_DOWN, ROUND_UP, ROUND_HALF_UP, ROUND_UNNECESSARY,
 };
 
-// Convert a Java-BigDecimal expression to a JS expression using a
-// recursive-descent parser.
-//
-// Grammar (informal):
-//   expr     := orExpr
-//   orExpr   := andExpr ( '||' andExpr )*
-//   andExpr  := cmpExpr ( '&&' cmpExpr )*
-//   cmpExpr  := addExpr ( ('=='|'!='|'<='|'>='|'<'|'>') addExpr )?
-//   addExpr  := mulExpr ( ('+'|'-') mulExpr )*
-//   mulExpr  := unary  ( ('*'|'/') unary )*
-//   unary    := ('-' | '!')? postfix
-//   postfix  := primary ( '.' IDENT '(' args? ')' | '[' expr ']' )*
-//   primary  := NUMBER | IDENT | '(' expr ')' | IDENT '(' args? ')'
-//   args     := expr (',' expr)*
 const METHODS = {
   add: (r, a) => `(${r} + ${a[0]})`,
   subtract: (r, a) => `(${r} - ${a[0]})`,
@@ -95,7 +63,7 @@ class Parser {
     if (this.peek(s)) { this.i += s.length; return true; }
     return false;
   }
-  // Tokens
+
   matchIdent() {
     this.ws();
     const m = /^[A-Za-z_]\w*/.exec(this.src.slice(this.i));
@@ -110,14 +78,12 @@ class Parser {
     this.i += m[0].length;
     return m[0];
   }
-  // Top-level entry
+
   parseExpr() {
     const r = this.parseOr();
     this.ws();
     if (this.i < this.src.length) {
-      // Allow trailing junk: caller may pass an assignment 'X = expr'; if we
-      // see an '=' at top, treat it as assignment.
-      // Otherwise it's a parse error.
+
       throw new Error('Trailing content at ' + this.i + ': ' + this.src.slice(this.i));
     }
     return r;
@@ -156,7 +122,7 @@ class Parser {
         const r = this.parseMul();
         l = `(${l} + ${r})`;
       } else if (this.peek('-') && !this.peek('->')) {
-        this.i++; // consume single '-'
+        this.i++;
         const r = this.parseMul();
         l = `(${l} - ${r})`;
       } else break;
@@ -166,7 +132,7 @@ class Parser {
   parseMul() {
     let l = this.parseUnary();
     while (this.tryConsume('*') || this.tryConsume('/')) {
-      // We don't know which op we ate; backtrack 1 char to read it.
+
       const op = this.src[this.i - 1];
       const r = this.parseUnary();
       l = `(${l} ${op} ${r})`;
@@ -177,7 +143,7 @@ class Parser {
     this.ws();
     if (this.tryConsume('!')) return `!(${this.parsePostfix()})`;
     if (this.peek('-') && !/\d/.test(this.src[this.i + 1] || '')) {
-      // unary minus only if not part of a number literal
+
       this.i++;
       return `(-${this.parsePostfix()})`;
     }
@@ -194,8 +160,7 @@ class Parser {
         if (!name) { this.i = save; break; }
         this.ws();
         if (!this.peek('(')) {
-          // Not a method call — could be a property access (BigDecimal.ROUND_DOWN handled below).
-          // For now, treat 'a.b' as 'a.b' literally if not followed by '('.
+
           r = `${r}.${name}`;
           continue;
         }
@@ -210,7 +175,7 @@ class Parser {
         if (METHODS[name]) {
           r = METHODS[name](r, args);
         } else {
-          // Unknown chain method — preserve literally (shouldn't happen for valid PAP).
+
           r = `${r}.${name}(${args.join(', ')})`;
         }
       } else if (this.peek('[')) {
@@ -234,7 +199,7 @@ class Parser {
     if (num != null) return num;
     const id = this.matchIdent();
     if (!id) throw new Error('Expected primary at ' + this.i + ' in: ' + this.src);
-    // BigDecimal special forms
+
     if (id === 'BigDecimal') {
       this.consume('.');
       const member = this.matchIdent();
@@ -252,7 +217,7 @@ class Parser {
       }
       throw new Error('Unknown BigDecimal member: ' + member);
     }
-    // Function call: IDENT '(' args ')'
+
     this.ws();
     if (this.peek('(')) {
       this.consume('(');
@@ -269,21 +234,11 @@ class Parser {
   }
 }
 
-// Minimal XML walker. The PAP XML is regular; we parse it on the fly using
-// regex-driven tokenization. Each method body is a list of statements.
-//
-// Statement types:
-//   { type:'eval',    expr }      // <EVAL exec="..."/>
-//   { type:'execute', method }    // <EXECUTE method="..."/>
-//   { type:'if',      cond, then, else } // <IF><THEN>...<ELSE>...</IF>
-//
-// Whitespace and comments are stripped during parse.
-
 function parseStatements(body) {
   const stmts = [];
   let i = 0;
   while (i < body.length) {
-    // Skip whitespace and comments
+
     while (i < body.length) {
       const wsMatch = /^\s+/.exec(body.slice(i));
       if (wsMatch) { i += wsMatch[0].length; continue; }
@@ -297,15 +252,12 @@ function parseStatements(body) {
     }
     if (i >= body.length) break;
 
-    // <EVAL exec="..."/>
     let m = /^<EVAL\s+exec\s*=\s*"((?:[^"\\]|\\.)*)"\s*\/>/.exec(body.slice(i));
     if (m) { stmts.push({ type: 'eval', expr: m[1] }); i += m[0].length; continue; }
 
-    // <EXECUTE method="..."/>
     m = /^<EXECUTE\s+method\s*=\s*"(\w+)"\s*\/>/.exec(body.slice(i));
     if (m) { stmts.push({ type: 'execute', method: m[1] }); i += m[0].length; continue; }
 
-    // <IF expr="...">...</IF>
     m = /^<IF\s+expr\s*=\s*"((?:[^"\\]|\\.)*)"\s*>/.exec(body.slice(i));
     if (m) {
       const cond = m[1];
@@ -318,14 +270,13 @@ function parseStatements(body) {
       continue;
     }
 
-    // </THEN> </ELSE> are handled in parseThenElse, so we should never see them here.
     throw new Error('Unexpected at offset ' + i + ': ' + body.slice(i, i + 60));
   }
   return stmts;
 }
 
 function findMatchingClose(s, start, tag) {
-  // Find matching </tag> handling nested <tag> opens.
+
   const openRe = new RegExp('<' + tag + '\\b', 'g');
   const closeRe = new RegExp('</' + tag + '>', 'g');
   let depth = 1;
@@ -343,7 +294,7 @@ function findMatchingClose(s, start, tag) {
 }
 
 function parseThenElse(inner) {
-  // Inner = whitespace + <THEN>...</THEN> + (whitespace + <ELSE>...</ELSE>)?
+
   let i = 0;
   while (/\s/.test(inner[i])) i++;
   if (!inner.startsWith('<THEN>', i)) throw new Error('Expected <THEN>');
@@ -361,10 +312,9 @@ function parseThenElse(inner) {
   return { then: parseStatements(thenBody), else: parseStatements(elseBody) };
 }
 
-// Extract methods from the XML source.
 function parseMethods(xml) {
   const methods = {};
-  // <MAIN>…</MAIN> is the root; treat it like a method named MAIN.
+
   const mainMatch = /<MAIN>([\s\S]*?)<\/MAIN>/.exec(xml);
   if (mainMatch) methods.MAIN = parseStatements(mainMatch[1]);
   const re = /<METHOD\s+name="(\w+)"\s*>([\s\S]*?)<\/METHOD>/g;
@@ -373,12 +323,9 @@ function parseMethods(xml) {
   return methods;
 }
 
-// Extract initial state (defaults for INPUT / INTERNAL).
-// Defaults can be: BigDecimal.ZERO, BigDecimal.valueOf(N), explicit numbers,
-// or `new BigDecimal(N)`. Arrays (TABx) are read from <CONSTANT>.
 function parseInitialState(xml) {
   const state = {};
-  // Tolerant patterns — handle attribute order and typos like "defaul=" in some PAP files.
+
   const inputRe = /<INPUT\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
   const internalRe = /<INTERNAL\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
   const outputRe = /<OUTPUT\s+name="(\w+)"[^/]*?(?:default="([^"]+)")?[^/]*?\/>/g;
@@ -392,16 +339,16 @@ function parseInitialState(xml) {
       else if (/^BigDecimal\.valueOf\((-?[\d.]+)\)$/.test(dflt)) state[name] = +RegExp.$1;
       else if (/^new BigDecimal\("?(-?[\d.]+)"?\)$/.test(dflt)) state[name] = +RegExp.$1;
       else if (/^-?[\d.]+$/.test(dflt)) state[name] = +dflt;
-      else state[name] = 0; // unknown default form; will be set during execution
+      else state[name] = 0;
     }
   }
-  // Constants — only the numeric ones (ZAHL*) and arrays
+
   const constRe = /<CONSTANT\s+name="(\w+)"\s+type="(BigDecimal(?:\[\])?)"\s+value="([^"]+)"\s*\/>/g;
   let c;
   while ((c = constRe.exec(xml))) {
     const name = c[1], type = c[2], value = c[3];
     if (type === 'BigDecimal[]') {
-      // value like "{BigDecimal.ZERO, BigDecimal.valueOf(0.4), …}"
+
       const items = value.slice(1, -1).split(',').map(s => {
         const t = s.trim();
         if (t === 'BigDecimal.ZERO') return 0;
@@ -421,15 +368,13 @@ function parseInitialState(xml) {
   return state;
 }
 
-// Compile a method body's statements into a JS function source.
 function compileStatements(stmts) {
   return stmts.map(compileStatement).join('\n');
 }
 
 function compileStatement(s) {
   if (s.type === 'eval') {
-    // EVAL exec is of the form "LHS = RHS". Split on the first '=' that is NOT
-    // part of '==', '<=', '>=', '!='.
+
     const m = /^([^=<>!]+?)\s*=\s*(?!=)(.+)$/.exec(s.expr);
     if (!m) {
       const js = convertExpr(s.expr);
@@ -452,8 +397,6 @@ function compileStatement(s) {
   throw new Error('Unknown stmt: ' + s.type);
 }
 
-// Make every variable reference go through `this.`. We use a name list so we
-// only prefix actual PAP variables, not local helpers like `_add`, `Math`, etc.
 let _varNames = null;
 function setVarNames(names) { _varNames = new Set(names); }
 function scopeVars(src) {
@@ -464,10 +407,9 @@ function scopeVars(src) {
 }
 
 export function compilePap(xml) {
-  // Strip comments globally — they appear inside method bodies and confuse the
-  // structural regex that expects <THEN>/<ELSE> right after <IF>.
+
   xml = xml.replace(/<!--[\s\S]*?-->/g, '');
-  // Decode XML entities that appear in expr/exec attributes (mostly < and >).
+
   xml = xml.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
   const methods = parseMethods(xml);
   const state = parseInitialState(xml);
@@ -489,8 +431,7 @@ export function compilePap(xml) {
     run(inputs) {
       const ctx = { ...this.initialState, ...inputs };
       const helpers = helperNames.map(k => _api[k]);
-      // Wrap each method so that `this` is bound to ctx and helpers are passed
-      // as positional args along with the method map.
+
       const wrappedMethods = {};
       for (const k of Object.keys(this.methods)) {
         wrappedMethods[k] = { call: (t) => this.methods[k].call(t, wrappedMethods, ...helpers) };

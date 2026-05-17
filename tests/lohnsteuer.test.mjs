@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateLohnsteuer } from './lohnsteuer.mjs';
 
-// All cases use PAP 2026 by default.
-
 test('Lohnsteuer: 0 below Grundfreibetrag (Brutto 500)', () => {
   const r = calculateLohnsteuer({ brutto: 500, steuerklasse: 1, kkZusatzbeitrag: 0.017 });
   assert.equal(r.lohnsteuer, 0);

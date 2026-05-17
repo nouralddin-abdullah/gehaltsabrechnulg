@@ -35,9 +35,7 @@ test('convertExpr: divide with scale and mode', () => {
 
 test('convertExpr: KVSATZAN formula', () => {
   const r = convertExpr('(KVZ.divide(ZAHL2).divide(ZAHL100)).add(BigDecimal.valueOf(0.07))');
-  // Expected: (_div(KVZ, ZAHL2) / ZAHL100) + 0.07
-  // After folding chain:  ((_div(KVZ, ZAHL2)) / ZAHL100) + (0.07)
-  // Our two-arg divide goes to _div without rounding => same as a/b
+
   assert.match(r, /\(0\.07\)/);
   assert.match(r, /KVZ/);
 });
@@ -71,14 +69,10 @@ function lstFor(bruttoMonth, stkl, extra = {}) {
     LZZ: 2,
     RE4: Math.round(bruttoMonth * 100),
     STKL: stkl,
-    PVZ: 1, // childless
+    PVZ: 1,
     ...extra,
   })).LSTLZZ / 100;
 }
-
-// Smoke tests on plausible ranges. These don't pin to exact published numbers
-// (the BMF interface is authoritative), only to monotonicity and orders of
-// magnitude.
 
 test('PAP 2026: Brutto 500 StKl 1 → 0 LSt (below Grundfreibetrag)', () => {
   assert.equal(lstFor(500, 1), 0);
@@ -110,7 +104,7 @@ test('PAP 2026: LSt is monotonically increasing in Brutto', () => {
 test('PAP 2026: Konfession adds Kirchensteuer', () => {
   const noConf = pap2026.run(defaultInputs({ LZZ: 2, RE4: 300000, STKL: 1, PVZ: 1, R: 0 }));
   const withConf = pap2026.run(defaultInputs({ LZZ: 2, RE4: 300000, STKL: 1, PVZ: 1, R: 1 }));
-  // BK is the Bemessungsgrundlage Kirchensteuer in cents
+
   assert.equal(noConf.BK, 0);
   assert.ok(withConf.BK > 0, `Expected BK > 0 with Konfession, got ${withConf.BK}`);
 });

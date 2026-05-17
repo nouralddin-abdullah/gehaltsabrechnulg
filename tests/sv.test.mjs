@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateSV, pvAnRate, midijobRedBmg, SV_RATES_2024 } from './sv.mjs';
 
-// PV AN rate cases
 test('pvAnRate: childless ≥23 = 2.3%', () => {
   assert.equal(pvAnRate({ kinder: 0, age: 30 }), 0.023);
 });
@@ -35,7 +34,6 @@ test('pvAnRate: Sachsen childless ≥23 = 2.8% (+0.5%)', () => {
   assert.equal(pvAnRate({ kinder: 0, age: 30, bundesland: 'SN' }), 0.028);
 });
 
-// Midijob reduced base
 test('midijobRedBmg: below range = full brutto', () => {
   assert.equal(midijobRedBmg(500), 500);
 });
@@ -58,22 +56,17 @@ test('midijobRedBmg: monotonic in range', () => {
   const a = midijobRedBmg(1000);
   const b = midijobRedBmg(1500);
   assert.ok(a < b);
-  assert.ok(a > 538); // and above the floor
+  assert.ok(a > 538);
 });
 
-// calculateSV — standard case
 test('calculateSV: standard, 3000 Brutto, StKl irrelevant, no Midijob, childless', () => {
   const r = calculateSV({
     brutto: 3000,
     kinder: 0,
     age: 30,
-    kkZusatzbeitrag: 0.017, // 1.7%
+    kkZusatzbeitrag: 0.017,
   });
-  // AN rates:
-  //   KV: 7.3% + 0.85% = 8.15% → 3000 * 8.15% = 244.50
-  //   RV: 9.3% → 279.00
-  //   AV: 1.3% → 39.00
-  //   PV: 2.3% (childless) → 69.00
+
   assert.equal(r.kvBeitrag, 244.50);
   assert.equal(r.rvBeitrag, 279.00);
   assert.equal(r.avBeitrag, 39.00);
@@ -82,14 +75,14 @@ test('calculateSV: standard, 3000 Brutto, StKl irrelevant, no Midijob, childless
 
 test('calculateSV: with 2 children → lower PV', () => {
   const r = calculateSV({ brutto: 3000, kinder: 2, age: 30, kkZusatzbeitrag: 0.017 });
-  // PV: 1.45% → 43.50
+
   assert.equal(r.pvBeitrag, 43.50);
 });
 
 test('calculateSV: above KV-BBG caps the KV-Brutto', () => {
   const r = calculateSV({ brutto: 10000, kinder: 0, kkZusatzbeitrag: 0.017 });
   assert.equal(r.kvBrutto, SV_RATES_2024.bbg_kv_pv_month);
-  // KV-Beitrag = 5175 * 8.15% = 421.76 (rounded)
+
   assert.equal(r.kvBeitrag, Math.round(SV_RATES_2024.bbg_kv_pv_month * 0.0815 * 100) / 100);
 });
 
@@ -109,9 +102,9 @@ test('calculateSV: Ost RV-BBG is lower than West', () => {
 test('calculateSV: Midijob reduces AN contributions but reports full Brutto', () => {
   const reg = calculateSV({ brutto: 1500, kinder: 1, age: 30, kkZusatzbeitrag: 0.017 });
   const mij = calculateSV({ brutto: 1500, kinder: 1, age: 30, kkZusatzbeitrag: 0.017, midijob: true });
-  // Brutto reported should be 1500 in both cases (full, capped at BBG)
+
   assert.equal(mij.kvBrutto, 1500);
-  // But Beiträge should be lower with Midijob
+
   assert.ok(mij.kvBeitrag < reg.kvBeitrag);
   assert.ok(mij.rvBeitrag < reg.rvBeitrag);
 });

@@ -1,24 +1,7 @@
-// Compare our embedded Lohnsteuer engine against:
-//   1) Published Lohnsteuertabelle 2024 (monthly, StKl 1, no Konfession).
-//      These are hand-typed reference values from the public BMF tables.
-//   2) (Optional) The BMF web service at bmf-steuerrechner.de.
-//
-// Usage:
-//   node scripts/verify-against-bmf.mjs            # local table check only
-//   node scripts/verify-against-bmf.mjs --bmf      # also call BMF web service
-//
-// CORS does not apply here — Node is the HTTP client, not the browser.
-//
-// If --bmf is enabled and the BMF endpoint format has changed, edit `bmfUrl()`
-// below. The published interface description is at:
-//   https://www.bmf-steuerrechner.de/interface/
+
 
 import { calculateLohnsteuer } from '../tests/lohnsteuer.mjs';
 
-// Reference values: 2024 Lohnsteuertabelle, Monatslohn, StKl 1, no Konfession,
-// no Freibetrag, allgemeine KV with Zusatzbeitrag 1.7%, no Midijob, kein Kind.
-// These are typical published values. Tolerance: ±15 EUR (our model uses a
-// simplified Vorsorgepauschale).
 const REFERENCES_2024_STKL1 = [
   { brutto: 1000, lstExpected:   0 },
   { brutto: 1500, lstExpected:   0 },
@@ -52,36 +35,21 @@ function checkAgainstTable() {
   return fails;
 }
 
-// BMF web service caller. Tries a GET interface; adjust if BMF changes format.
-//
-// Known interface (2024Version1):
-//   GET https://www.bmf-steuerrechner.de/interface/2024Version1.xhtml
-//        ?code=ext2024Version1
-//        &LZZ=<1=Jahr|2=Monat|3=Woche|4=Tag>
-//        &RE4=<jahres-Brutto in EUR-Cent>
-//        &STKL=<1..6>
-//        &KVZ=<KV-Zusatzbeitrag in tenths-of-percent, e.g. 17 for 1.7%>
-//        &KRV=<0|1|2>
-//        &PVZ=<0|1>      // Pflegevers.-Zuschlag (childless)
-//        &PVS=<0|1>      // Sachsen
-//        &R=<0..1>       // Konfession Religionszugehörigkeit
-//        &ZKF=<Kinderfreibetrag, halbe Anzahl>
-//
 function bmfUrl({ brutto, steuerklasse, year = 2024 }) {
-  // We pass annual income (RE4) for clarity, LZZ=1.
-  const re4Cent = Math.round(brutto * 12 * 100); // annual EUR -> cents
+
+  const re4Cent = Math.round(brutto * 12 * 100);
   const params = new URLSearchParams({
     code: `ext${year}Version1`,
-    LZZ: '1',                                        // Lohnzahlungszeitraum: Jahr
-    RE4: String(re4Cent),                            // Jahres-Brutto in Cent
+    LZZ: '1',
+    RE4: String(re4Cent),
     STKL: String(steuerklasse),
-    KVZ: '17',                                       // 1.7% Zusatzbeitrag
+    KVZ: '17',
     KRV: '0',
-    PVZ: '1',                                        // Kinderlos
-    PVS: '0',                                        // Nicht Sachsen
-    R: '0',                                          // Keine Konfession
-    ZKF: '0',                                        // Kinder
-    af: '0',                                         // kein Faktor
+    PVZ: '1',
+    PVS: '0',
+    R: '0',
+    ZKF: '0',
+    af: '0',
     f: '1.0',
     AJAHR: String(year),
   });
@@ -92,12 +60,11 @@ async function callBMF(c) {
   const url = bmfUrl(c);
   const res = await fetch(url, { headers: { Accept: 'application/xml' } });
   const xml = await res.text();
-  // Service returns XML like <ausgaben><ausgabe name="LSTLZZ" value="..." .../></ausgaben>
-  // Values are in EUR-Cent for monetary outputs.
+
   const m = xml.match(/name="LSTLZZ"[^>]*value="(\d+)"/);
   if (!m) throw new Error(`BMF XML missing LSTLZZ: ${xml.slice(0, 200)}`);
   const annualLstCent = +m[1];
-  return annualLstCent / 100 / 12; // back to monthly EUR
+  return annualLstCent / 100 / 12;
 }
 
 async function checkAgainstBMF() {

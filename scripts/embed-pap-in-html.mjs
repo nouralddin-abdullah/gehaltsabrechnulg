@@ -1,7 +1,4 @@
-// Replace the old hand-rolled Lohnsteuer block in gehaltsabrechnung.html with
-// the PAP interpreter + embedded XML.
-//
-// Run: node scripts/embed-pap-in-html.mjs
+
 
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -21,11 +18,8 @@ if (startIdx < 0 || endIdx < 0) {
 const before = html.slice(0, startIdx);
 const after = html.slice(endIdx + endMarker.length);
 
-// Generate the inline PAP snippet
 const inline = execSync('node scripts/inline-pap.mjs').toString('utf8');
 
-// Wrap the inline content with the existing markers and adapter shim that
-// gives the rest of the HTML a `calculateLohnsteuer(p)` function.
 const adapter = `
     const BUNDESLAND_KSTRATE = {
       BW: 0.08, BY: 0.08,
@@ -62,7 +56,6 @@ const adapter = `
       return { lohnsteuer, soli, kirchensteuer, steuerBrutto: +p.brutto };
     }`;
 
-// Indent the inline snippet by 4 spaces to match HTML indentation
 const indented = inline.split('\n').map(l => l ? '    ' + l : l).join('\n');
 
 const newBlock = startMarker + '\n' + indented + adapter + '\n' + endMarker;
