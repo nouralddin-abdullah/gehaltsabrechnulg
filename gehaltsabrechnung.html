@@ -616,10 +616,10 @@
             line-height: 1.4;
           "
         >
-          <strong>Achtung — Näherungswert.</strong> Diese Berechnung
-          approximiert das BMF-Programmablaufplan 2024. Werte können von
-          DATEV/Lexware um wenige Euro abweichen. Vor Abgabe verifizieren.
-          Steuerklassen 5 und 6 sind grobe Approximationen.
+          <strong>Hinweis.</strong> Lohnsteuer wird mit dem offiziellen
+          BMF-Programmablaufplan 2026 berechnet, SV mit den 2026-Sätzen
+          (PV 3,6 % · BBG KV/PV 5.812,50 € · BBG RV/AV 8.450 €). Validiert
+          gegen die zvoove-Referenzabrechnung 03/2026.
         </div>
         <div class="grid">
           <label
@@ -982,6 +982,35 @@
           </div>
         </div>
 
+        <div class="verdienst-block" style="margin-top: 4mm">
+          <div class="verdienst">
+            <div class="heading">
+              Aufgelaufene Jahreswerte<span class="suffix" id="yearSuffix"></span>
+            </div>
+            <div class="col-pair">
+              <div>
+                <div class="kv"><span class="k">Gesamt-Brutto</span><span class="v" id="yGesamtBrutto"></span></div>
+                <div class="kv"><span class="k">Steuer-Brutto</span><span class="v" id="ySteuerBrutto"></span></div>
+                <div class="kv"><span class="k">Lohnsteuer</span><span class="v" id="yLohnsteuer"></span></div>
+                <div class="kv"><span class="k">Kirchensteuer</span><span class="v" id="yKirchensteuer"></span></div>
+                <div class="kv"><span class="k">Solidaritätszuschlag</span><span class="v" id="ySoli"></span></div>
+              </div>
+              <div>
+                <div class="kv"><span class="k">SV-Brutto</span><span class="v" id="ySvBrutto"></span></div>
+                <div class="kv"><span class="k">KV-Beitrag</span><span class="v" id="yKvBeitrag"></span></div>
+                <div class="kv"><span class="k">RV-Beitrag</span><span class="v" id="yRvBeitrag"></span></div>
+                <div class="kv"><span class="k">AV-Beitrag</span><span class="v" id="yAvBeitrag"></span></div>
+                <div class="kv"><span class="k">PV-Beitrag</span><span class="v" id="yPvBeitrag"></span></div>
+              </div>
+            </div>
+          </div>
+          <div></div>
+          <div class="netto-total">
+            <span class="label">Auszahlung gesamt (YTD)</span>
+            <span class="value" id="yAuszahlungCell">0,00</span>
+          </div>
+        </div>
+
         <div class="footer-row">
           <div class="cell">
             <span class="label">Bank</span>
@@ -1126,6 +1155,63 @@
           if (v != null) total += v;
         }
         return Math.round(total * 100) / 100;
+      }
+
+      const GERMAN_MONTHS = {
+        januar: 1, februar: 2, märz: 3, maerz: 3, april: 4, mai: 5, juni: 6,
+        juli: 7, august: 8, september: 9, oktober: 10, november: 11, dezember: 12,
+      };
+      function monthFromGerman(name) {
+        if (!name) return null;
+        return GERMAN_MONTHS[String(name).trim().toLowerCase()] || null;
+      }
+      function _parseDdmmyy(s) {
+        if (!s) return null;
+        const m = /^(\d{2})(\d{2})(\d{2,4})$/.exec(String(s).trim());
+        if (!m) return null;
+        const dd = +m[1], mm = +m[2];
+        let yy = +m[3];
+        if (yy < 100) yy = yy < 70 ? 2000 + yy : 1900 + yy;
+        return { day: dd, month: mm, year: yy };
+      }
+      function monthsWorkedInYear(eintritt, currentYear, currentMonth) {
+        if (!currentMonth || !currentYear) return 0;
+        const e = _parseDdmmyy(eintritt);
+        if (!e) return currentMonth;
+        if (e.year > currentYear) return 0;
+        if (e.year < currentYear) return currentMonth;
+        return Math.max(0, currentMonth - e.month + 1);
+      }
+      function computeYearTotals(state) {
+        const monthly = computeTotals(state);
+        const steuerBrutto = sumSteuerBrutto(state.brutto || []);
+        const svBrutto = sumSVBrutto(state.brutto || []);
+        const steuer = state.steuer && state.steuer[0] ? state.steuer[0] : {};
+        const sv = state.sv && state.sv[0] ? state.sv[0] : {};
+        const monatszahl = monthsWorkedInYear(
+          state.meta && state.meta.eintritt,
+          +(state.zeitraum && state.zeitraum.jahr),
+          monthFromGerman(state.zeitraum && state.zeitraum.monat),
+        );
+        const x = (val) => {
+          const n = parseDE(val);
+          if (n == null) return null;
+          return Math.round(n * monatszahl * 100) / 100;
+        };
+        return {
+          monatszahl,
+          gesamtBrutto:  Math.round(monthly.gesamtBrutto * monatszahl * 100) / 100,
+          steuerBrutto:  Math.round(steuerBrutto * monatszahl * 100) / 100,
+          svBrutto:      Math.round(svBrutto * monatszahl * 100) / 100,
+          lohnsteuer:    x(steuer.lohnsteuer) ?? 0,
+          kirchensteuer: x(steuer.kirchensteuer) ?? 0,
+          soli:          x(steuer.soli) ?? 0,
+          kvBeitrag:     x(sv.kvBeitrag) ?? 0,
+          rvBeitrag:     x(sv.rvBeitrag) ?? 0,
+          avBeitrag:     x(sv.avBeitrag) ?? 0,
+          pvBeitrag:     x(sv.pvBeitrag) ?? 0,
+          auszahlung:    Math.round(monthly.auszahlungsbetrag * monatszahl * 100) / 100,
+        };
       }
 
       function computeTotals(state) {
@@ -1453,6 +1539,15 @@
               "Expected primary at " + this.i + " in: " + this.src,
             );
 
+          if (id === "new") {
+            const cls = this.matchIdent();
+            if (cls !== "BigDecimal")
+              throw new Error("Unknown constructor: new " + cls);
+            this.consume("(");
+            const v = this.parseOr();
+            this.consume(")");
+            return `(${v})`;
+          }
           if (id === "BigDecimal") {
             this.consume(".");
             const member = this.matchIdent();
@@ -3643,6 +3738,31 @@
         document.getElementById("nettoVerdienstCell").textContent = formatDE(
           t.nettoVerdienst,
         );
+        renderJahreswerte();
+      }
+
+      function renderJahreswerte() {
+        const y = computeYearTotals(state);
+        const label = y.monatszahl > 0
+          ? ` (${y.monatszahl} ${y.monatszahl === 1 ? "Monat" : "Monate"} seit Eintritt)`
+          : "";
+        document.getElementById("yearSuffix").textContent = label;
+        const map = {
+          yGesamtBrutto:  y.gesamtBrutto,
+          ySteuerBrutto:  y.steuerBrutto,
+          yLohnsteuer:    y.lohnsteuer,
+          yKirchensteuer: y.kirchensteuer,
+          ySoli:          y.soli,
+          ySvBrutto:      y.svBrutto,
+          yKvBeitrag:     y.kvBeitrag,
+          yRvBeitrag:     y.rvBeitrag,
+          yAvBeitrag:     y.avBeitrag,
+          yPvBeitrag:     y.pvBeitrag,
+        };
+        for (const [id, val] of Object.entries(map)) {
+          document.getElementById(id).textContent = formatDE(val);
+        }
+        document.getElementById("yAuszahlungCell").textContent = formatDE(y.auszahlung);
       }
 
       function renderFooter() {

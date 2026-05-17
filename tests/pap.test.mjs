@@ -49,6 +49,12 @@ test('compilePap: parses 2026 XML without throwing', () => {
   assert.ok(typeof pap.initialState === 'object');
 });
 
+test('compilePap: parses 2025 XML (handles new BigDecimal(N) form)', () => {
+  const xml = fs.readFileSync('reference/Lohnsteuer2025.xml', 'utf8');
+  const pap = compilePap(xml);
+  assert.ok(pap.methods.MAIN);
+});
+
 function defaultInputs(overrides = {}) {
   return {
     LZZ: 2, RE4: 0, STKL: 1, KVZ: 1.7, KRV: 0, PVZ: 0, PVS: 0,

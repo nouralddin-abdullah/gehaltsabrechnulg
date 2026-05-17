@@ -200,6 +200,14 @@ class Parser {
     const id = this.matchIdent();
     if (!id) throw new Error('Expected primary at ' + this.i + ' in: ' + this.src);
 
+    if (id === 'new') {
+      const cls = this.matchIdent();
+      if (cls !== 'BigDecimal') throw new Error('Unknown constructor: new ' + cls);
+      this.consume('(');
+      const v = this.parseOr();
+      this.consume(')');
+      return `(${v})`;
+    }
     if (id === 'BigDecimal') {
       this.consume('.');
       const member = this.matchIdent();

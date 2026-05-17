@@ -2,6 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateLohnsteuer } from './lohnsteuer.mjs';
 
+test('Lohnsteuer: matches denn\'s Biomarkt 03/2026 (Hussain) payslip', () => {
+  const r = calculateLohnsteuer({
+    brutto: 2810.12, steuerklasse: 1, year: 2026,
+    kkZusatzbeitrag: 0.032, kinderlos: true,
+  });
+  assert.equal(r.lohnsteuer, 251.00);
+  assert.equal(r.soli, 0);
+  assert.equal(r.kirchensteuer, 0);
+});
+
 test('Lohnsteuer: matches zvoove 03/2026 reference payslip', () => {
   const r = calculateLohnsteuer({
     brutto: 2817.79, steuerklasse: 1, year: 2026,

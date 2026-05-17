@@ -77,6 +77,19 @@ test('calculateSV: with 2 children → lower PV', () => {
   assert.equal(r.pvBeitrag, 46.50);
 });
 
+test('calculateSV: matches denn\'s Biomarkt 03/2026 (Hussain) payslip', () => {
+  const r = calculateSV({
+    brutto: 2810.12,
+    kinder: 0,
+    age: 27,
+    kkZusatzbeitrag: 0.032,
+  });
+  assert.equal(r.kvBeitrag, 250.10);
+  assert.equal(r.rvBeitrag, 261.34);
+  assert.equal(r.avBeitrag, 36.53);
+  assert.equal(r.pvBeitrag, 67.44);
+});
+
 test('calculateSV: matches zvoove 03/2026 reference payslip', () => {
   const r = calculateSV({
     brutto: 2817.79,

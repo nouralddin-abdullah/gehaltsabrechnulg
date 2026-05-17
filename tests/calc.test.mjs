@@ -6,6 +6,7 @@ import {
   sumSteuerBrutto, sumSVBrutto,
   sumSteuerAbzuege, sumSVAbzuege,
   computeTotals,
+  monthFromGerman, monthsWorkedInYear, computeYearTotals,
 } from './calc.mjs';
 
 test('test harness works', () => {
@@ -184,6 +185,77 @@ test('computeTotals: matches reference PDF', () => {
   assert.equal(t.svAbzuege, 336.94);
   assert.equal(t.nettoVerdienst, 2707.06);
   assert.equal(t.auszahlungsbetrag, 2707.06);
+});
+
+test('monthFromGerman: case-insensitive', () => {
+  assert.equal(monthFromGerman('März'), 3);
+  assert.equal(monthFromGerman('MÄRZ'), 3);
+  assert.equal(monthFromGerman('oktober'), 10);
+  assert.equal(monthFromGerman('Dezember'), 12);
+  assert.equal(monthFromGerman('Unsinn'), null);
+});
+
+test('monthsWorkedInYear: zvoove 03/2026 = 1 month (Eintritt same month)', () => {
+  assert.equal(monthsWorkedInYear('020326', 2026, 3), 1);
+});
+
+test('monthsWorkedInYear: Abdelrahman Oktober 2025, Eintritt 01.06.2025 = 5 months', () => {
+  assert.equal(monthsWorkedInYear('010625', 2025, 10), 5);
+});
+
+test('monthsWorkedInYear: Eintritt prior year = full year-to-current-month', () => {
+  assert.equal(monthsWorkedInYear('010623', 2025, 4), 4);
+});
+
+test('computeYearTotals: Mohammed 03/2026 — 1 month, matches monthly', () => {
+  const state = {
+    meta: { eintritt: '020326' },
+    zeitraum: { monat: 'März', jahr: '2026' },
+    brutto: [
+      { menge: '119,00', faktor: '16,69', st: 'L', sv: 'L', gb: 'J' },
+      { menge: '8,00',   faktor: '3,31',  st: 'L', sv: 'L', gb: 'J' },
+      { menge: '102,08', faktor: '3,31',  st: 'L', sv: 'L', gb: 'J' },
+      { menge: '1,08',   faktor: '0,00',  st: 'F', sv: 'F', gb: 'J' },
+      { menge: '15,00',  faktor: '2,50',  st: 'F', sv: 'F', gb: 'J' },
+      { menge: '7,00',   faktor: '0,00',  st: 'F', sv: 'F', gb: 'J' },
+      { menge: '28,00',  faktor: '16,69', st: 'L', sv: 'L', gb: 'J' },
+    ],
+    steuer: [{ tag: 'L', lohnsteuer: '254,58' }],
+    sv: [{ tag: 'L', kvBeitrag: '243,60', rvBeitrag: '262,05', avBeitrag: '36,63', pvBeitrag: '67,63' }],
+    nettoBezuege: [],
+  };
+  const y = computeYearTotals(state);
+  assert.equal(y.monatszahl, 1);
+  assert.equal(y.gesamtBrutto, 2855.29);
+  assert.equal(y.steuerBrutto, 2817.79);
+  assert.equal(y.svBrutto, 2817.79);
+  assert.equal(y.lohnsteuer, 254.58);
+  assert.equal(y.kvBeitrag, 243.60);
+  assert.equal(y.rvBeitrag, 262.05);
+  assert.equal(y.avBeitrag, 36.63);
+  assert.equal(y.pvBeitrag, 67.63);
+  assert.equal(y.auszahlung, 1990.80);
+});
+
+test('computeYearTotals: Abdelrahman Oktober 2025 — 5 months, matches PDF', () => {
+  const state = {
+    meta: { eintritt: '010625' },
+    zeitraum: { monat: 'Oktober', jahr: '2025' },
+    brutto: [
+      { lohnart: '2', bezeichnung: 'Gehalt', betrag: '576,90', st: 'L', sv: 'L', gb: 'J' },
+    ],
+    steuer: [{ tag: 'L', lohnsteuer: '0,00', kirchensteuer: '0,00', soli: '0,00' }],
+    sv: [{ tag: 'L', kvBeitrag: '2,62', rvBeitrag: '2,69', avBeitrag: '0,38', pvBeitrag: '0,52' }],
+    nettoBezuege: [],
+  };
+  const y = computeYearTotals(state);
+  assert.equal(y.monatszahl, 5);
+  assert.equal(y.gesamtBrutto, 2884.50);
+  assert.equal(y.lohnsteuer, 0);
+  assert.equal(y.kvBeitrag, 13.10);
+  assert.equal(y.rvBeitrag, 13.45);
+  assert.equal(y.avBeitrag, 1.90);
+  assert.equal(y.pvBeitrag, 2.60);
 });
 
 test('computeTotals: netto rows shift the Auszahlungsbetrag', () => {
