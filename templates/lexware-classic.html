@@ -224,19 +224,28 @@
           <div class="result-box"><span class="lbl">Nettoentgelt</span><span class="val" id="nettoVerdienstCell">0,00 EUR</span></div>
         </div>
 
-        <!-- BOTTOM: YTD left, Netto-Bezüge + Bank right -->
+        <!-- BOTTOM: Verdienst + YTD left, Netto-Bezüge + Bank right -->
         <div class="bottom-section">
           <div>
             <table class="ytd">
+              <tr><td class="heading" colspan="4">Verdienstbescheinigung<span id="verdienstSuffix"></span></td></tr>
+              <tr><td>Gesamt-Brutto</td><td class="num" id="vGesamtBrutto"></td><td>SV-Brutto</td><td class="num" id="vSvBrutto"></td></tr>
+              <tr><td>Steuer-Brutto</td><td class="num" id="vSteuerBrutto"></td><td>KV-Beitrag</td><td class="num" id="vKvBeitrag"></td></tr>
+              <tr><td>Lohnsteuer</td><td class="num" id="vLohnsteuer"></td><td>RV-Beitrag</td><td class="num" id="vRvBeitrag"></td></tr>
+              <tr><td>Kirchensteuer</td><td class="num" id="vKirchensteuer"></td><td>AV-Beitrag</td><td class="num" id="vAvBeitrag"></td></tr>
+              <tr><td>Solidaritätszuschlag</td><td class="num" id="vSoli"></td><td>PV-Beitrag</td><td class="num" id="vPvBeitrag"></td></tr>
+              <tr><td>Steuerfreie Bezüge</td><td class="num" id="vSteuerfrei"></td><td>VWL gesamt</td><td class="num" id="vVwl"></td></tr>
+              <tr><td>P. verst. Zuk.sich.</td><td class="num" id="vPverstZukSich"></td><td>Kug-Auszahlung</td><td class="num" id="vKug"></td></tr>
+              <tr><td>Pfändung Rest</td><td class="num" id="vPfaendungRest"></td><td>Darlehen Rest</td><td class="num" id="vDarlehenRest"></td></tr>
+            </table>
+            <table class="ytd" style="margin-top:3mm">
               <tr><td class="heading" colspan="4">Aufgelaufene Jahreswerte<span id="yearSuffix"></span></td></tr>
-              <tr><td>Gesamtbrutto</td><td class="num" id="vGesamtBrutto"></td><td>Steuer - Brutto</td><td class="num" id="vSteuerBrutto"></td></tr>
-              <tr><td>Lohnsteuer</td><td class="num" id="vLohnsteuer"></td><td>Kirchensteuer</td><td class="num" id="vKirchensteuer"></td></tr>
-              <tr><td>SolZ</td><td class="num" id="vSoli"></td><td>KV - Brutto</td><td class="num" id="vSvBrutto"></td></tr>
-              <tr><td>PV - Brutto</td><td class="num" id="vPvBeitrag"></td><td>RV - Brutto</td><td class="num" id="vRvBeitrag"></td></tr>
-              <tr><td>KV - Beitrag</td><td class="num" id="vKvBeitrag"></td><td>AV - Brutto</td><td class="num" id="vAvBeitrag"></td></tr>
-              <tr><td>PV - Beitrag</td><td class="num" id="yPvBeitrag"></td><td>RV - Beitrag</td><td class="num" id="yRvBeitrag"></td></tr>
-              <tr><td>AV - Beitrag</td><td class="num" id="yAvBeitrag"></td><td>VWL gesamt</td><td class="num" id="vVwl"></td></tr>
-              <tr><td>Steuerfreie Bezüge</td><td class="num" id="vSteuerfrei"></td><td>Auszahlungsbetrag</td><td class="num" id="yAuszahlungCell">0,00</td></tr>
+              <tr><td>Gesamt-Brutto</td><td class="num" id="yGesamtBrutto"></td><td>SV-Brutto</td><td class="num" id="ySvBrutto"></td></tr>
+              <tr><td>Steuer-Brutto</td><td class="num" id="ySteuerBrutto"></td><td>KV-Beitrag</td><td class="num" id="yKvBeitrag"></td></tr>
+              <tr><td>Lohnsteuer</td><td class="num" id="yLohnsteuer"></td><td>RV-Beitrag</td><td class="num" id="yRvBeitrag"></td></tr>
+              <tr><td>Kirchensteuer</td><td class="num" id="yKirchensteuer"></td><td>AV-Beitrag</td><td class="num" id="yAvBeitrag"></td></tr>
+              <tr><td>Solidaritätszuschlag</td><td class="num" id="ySoli"></td><td>PV-Beitrag</td><td class="num" id="yPvBeitrag"></td></tr>
+              <tr><td colspan="2"></td><td>Auszahlung</td><td class="num" id="yAuszahlungCell">0,00</td></tr>
             </table>
           </div>
           <div>
@@ -2776,18 +2785,23 @@
       function renderVerdienst() {
         const v = state.verdienst;
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ""; };
-        setText("vGesamtBrutto", v.gesamtBrutto ? v.gesamtBrutto + " EUR" : "");
-        setText("vSteuerBrutto", v.steuerBrutto ? v.steuerBrutto + " EUR" : "");
-        setText("vLohnsteuer", v.lohnsteuer ? v.lohnsteuer + " EUR" : "");
-        setText("vKirchensteuer", v.kirchensteuer ? v.kirchensteuer + " EUR" : "");
-        setText("vSoli", v.soli ? v.soli + " EUR" : "");
-        setText("vSvBrutto", v.svBrutto ? v.svBrutto + " EUR" : "");
-        setText("vKvBeitrag", v.kvBeitrag ? v.kvBeitrag + " EUR" : "");
-        setText("vRvBeitrag", v.rvBeitrag ? v.rvBeitrag + " EUR" : "");
-        setText("vAvBeitrag", v.avBeitrag ? v.avBeitrag + " EUR" : "");
-        setText("vPvBeitrag", v.pvBeitrag ? v.pvBeitrag + " EUR" : "");
-        setText("vSteuerfrei", v.steuerfreieBezuege ? v.steuerfreieBezuege + " EUR" : "");
-        setText("vVwl", v.vwlGesamt ? v.vwlGesamt + " EUR" : "");
+        setText("verdienstSuffix", v.nachberechnungVorjahr ? " mit Nachberechnung Vorjahr" : "");
+        setText("vGesamtBrutto", v.gesamtBrutto);
+        setText("vSteuerBrutto", v.steuerBrutto);
+        setText("vLohnsteuer", v.lohnsteuer);
+        setText("vKirchensteuer", v.kirchensteuer);
+        setText("vSoli", v.soli);
+        setText("vSvBrutto", v.svBrutto);
+        setText("vKvBeitrag", v.kvBeitrag);
+        setText("vRvBeitrag", v.rvBeitrag);
+        setText("vAvBeitrag", v.avBeitrag);
+        setText("vPvBeitrag", v.pvBeitrag);
+        setText("vSteuerfrei", v.steuerfreieBezuege);
+        setText("vVwl", v.vwlGesamt);
+        setText("vKug", v.kugAuszahlung);
+        setText("vPverstZukSich", v.pVerstZukSich);
+        setText("vPfaendungRest", v.pfaendungRest);
+        setText("vDarlehenRest", v.darlehenRest);
 
         const body = document.getElementById("nettoBody");
         body.innerHTML = "";
@@ -2808,10 +2822,17 @@
         const label = y.monatszahl > 0 ? ` (${y.monatszahl} ${y.monatszahl === 1 ? "Monat" : "Monate"} seit Eintritt)` : "";
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ""; };
         setText("yearSuffix", label);
-        setText("yPvBeitrag", formatDE(y.pvBeitrag) + " EUR");
-        setText("yRvBeitrag", formatDE(y.rvBeitrag) + " EUR");
-        setText("yAvBeitrag", formatDE(y.avBeitrag) + " EUR");
-        setText("yAuszahlungCell", formatDE(y.auszahlung) + " EUR");
+        setText("yGesamtBrutto", formatDE(y.gesamtBrutto));
+        setText("ySteuerBrutto", formatDE(y.steuerBrutto));
+        setText("ySvBrutto", formatDE(y.svBrutto));
+        setText("yLohnsteuer", formatDE(y.lohnsteuer));
+        setText("yKirchensteuer", formatDE(y.kirchensteuer));
+        setText("ySoli", formatDE(y.soli));
+        setText("yKvBeitrag", formatDE(y.kvBeitrag));
+        setText("yRvBeitrag", formatDE(y.rvBeitrag));
+        setText("yAvBeitrag", formatDE(y.avBeitrag));
+        setText("yPvBeitrag", formatDE(y.pvBeitrag));
+        setText("yAuszahlungCell", formatDE(y.auszahlung));
       }
 
       function renderFooter() {

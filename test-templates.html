@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Template Data Test</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { color: #0ff; }
+  h2 { color: #ff0; margin-top: 30px; }
+  .pass { color: #0f0; } .fail { color: #f00; font-weight: bold; }
+  .section { background: #16213e; padding: 15px; margin: 10px 0; border-radius: 8px; }
+  table { border-collapse: collapse; margin: 10px 0; }
+  td, th { border: 1px solid #333; padding: 4px 10px; text-align: left; }
+  th { background: #0a3d62; }
+  #status { font-size: 18px; padding: 10px; margin: 10px 0; border-radius: 5px; }
+</style>
+</head>
+<body>
+<h1>🧪 Template Data Integrity Test</h1>
+<div id="status">⏳ Running tests...</div>
+<div id="log"></div>
+
+<iframe id="datevFrame" src="templates/datev-classic.html" style="width:1px;height:1px;opacity:0;position:absolute"></iframe>
+<iframe id="lexFrame" src="templates/lexware-classic.html" style="width:1px;height:1px;opacity:0;position:absolute"></iframe>
+
+<script>
+const log = document.getElementById('log');
+let passed = 0, failed = 0;
+
+function addSection(title) {
+  log.innerHTML += `<h2>${title}</h2><div class="section" id="sec_${title.replace(/\s/g,'')}"></div>`;
+}
+function addResult(section, label, val1, val2, template1Name, template2Name) {
+  const sec = log.querySelector(`#sec_${section.replace(/\s/g,'')}`);
+  const clean1 = (val1||'').replace(/\s*EUR\s*/g,'').trim();
+  const clean2 = (val2||'').replace(/\s*EUR\s*/g,'').trim();
+  const match = clean1 === clean2;
+  if (match) passed++; else failed++;
+  const cls = match ? 'pass' : 'fail';
+  const icon = match ? '✅' : '❌';
+  sec.innerHTML += `<div class="${cls}">${icon} ${label}: ${template1Name}="${val1}" vs ${template2Name}="${val2}"</div>`;
+}
+function addCheck(section, label, value, expected) {
+  const sec = log.querySelector(`#sec_${section.replace(/\s/g,'')}`);
+  const match = value === expected;
+  if (match) passed++; else failed++;
+  const cls = match ? 'pass' : 'fail';
+  const icon = match ? '✅' : '❌';
+  sec.innerHTML += `<div class="${cls}">${icon} ${label}: got="${value}" expected="${expected}"</div>`;
+}
+
+// Build the state with März data
+const state = {
+  meta: { persNr:"1122672", geburtsdatum:"250789", stKl:"1", faktor:"", kiFrbtr:"0",
+    konfession:"", freibetragJ:"", freibetragM:"", dba:"", midijob:"", stTg:"30",
+    svNummer:"65250789E018", krankenkasse:"Techniker Krankenkasse", kkProzent:"17,29",
+    pgrs:"1111", bgrs:"2", umSvTg:"29", eintritt:"020326", austritt:"020426",
+    steuerId:"69814453022", mfb:"", rocCode:"", mandant:"343424421",
+    druckdatum:"31.03.2026", blatt:"1", persNrBox:"1122672", abtNr:"1", bn:"B/N", mandantBox:"" },
+  firma:"ALLPOWER Personalprofis GmbH*Rankestraße 2*10789 Berlin",
+  mitarbeiter:{ name:"Mohammed El-Korazatti", strasse:"Schützenstraße 28", plzOrt:"12526 Berlin" },
+  zeitraum:{ monat:"März", jahr:"2026" },
+  brutto:[
+    { lohnart:"100", bezeichnung:"Normalstunden", einheit:"Std", menge:"119,00", faktor:"16,69", prozent:"", st:"L", sv:"L", gb:"J" },
+    { lohnart:"104", bezeichnung:"Einsatzzulage", einheit:"Std", menge:"8,00", faktor:"3,31", prozent:"", st:"L", sv:"L", gb:"J" },
+    { lohnart:"133", bezeichnung:"Branchenzuschlag Vergleichslo", einheit:"Std", menge:"102,08", faktor:"3,31", prozent:"", st:"L", sv:"L", gb:"J" },
+    { lohnart:"600", bezeichnung:"Gleitzeitkonto addieren", einheit:"Std", menge:"1,08", faktor:"0,00", prozent:"", st:"F", sv:"F", gb:"J" },
+    { lohnart:"741", bezeichnung:"Fahrtkostenzuschuss (Aufwendu", einheit:"Tage", menge:"15,00", faktor:"2,50", prozent:"", st:"F", sv:"F", gb:"J" },
+    { lohnart:"913", bezeichnung:"Krank Eintritt LFZ über KK", einheit:"Tage", menge:"7,00", faktor:"0,00", prozent:"", st:"F", sv:"F", gb:"J" },
+    { lohnart:"930", bezeichnung:"Garantie", einheit:"Std", menge:"28,00", faktor:"16,69", prozent:"", st:"L", sv:"L", gb:"J" }
+  ],
+  steuer:[{ tag:"L", steuerBrutto:"2.817,79", lohnsteuer:"254,58", kirchensteuer:"", soli:"" }],
+  sv:[{ tag:"L", kvBrutto:"2.817,79", rvBrutto:"2.817,79", avBrutto:"2.817,79", pvBrutto:"2.817,79",
+    kvBeitrag:"243,60", rvBeitrag:"262,05", avBeitrag:"36,63", pvBeitrag:"67,63" }],
+  verdienst:{ nachberechnungVorjahr:false, gesamtBrutto:"2.855,29", steuerBrutto:"2.817,79",
+    lohnsteuer:"254,58", kirchensteuer:"", soli:"", steuerfreieBezuege:"37,50", pVerstZukSich:"",
+    pfaendungRest:"", darlehenRest:"", svBrutto:"2.817,79", kvBeitrag:"243,60", rvBeitrag:"262,05",
+    avBeitrag:"36,63", pvBeitrag:"67,63", vwlGesamt:"", kugAuszahlung:"" },
+  nettoBezuege:[],
+  bank:{ name:"Landesbank Berlin - Berliner S", iban:"DE58 1005 0000 1064 1292 65",
+    svAgAnteil:"", zusAgKosten:"", gesamtkosten:"", code:"" },
+  hinweiseZurAbrechnung:"",
+  automatik:{ enabled:true, steuerklasse:1, faktor:"", konfession:"", bundesland:"BE",
+    freibetragMonatlich:"", kkZusatzbeitrag:"2,69", kinder:0, age:36, midijob:false, westOst:"W" }
+};
+
+// Also build a Juni version to test month change
+const stateJuni = JSON.parse(JSON.stringify(state));
+stateJuni.zeitraum.monat = "Juni";
+
+let datevReady = false, lexReady = false;
+
+function extractData(doc) {
+  const get = (id) => { const el = doc.getElementById(id); return el ? el.textContent.trim() : null; };
+  return {
+    gesamtBrutto: get('gesamtBruttoCell'),
+    steuerTotal: get('steuerTotal'),
+    svTotal: get('svTotal'),
+    nettoVerdienst: get('nettoVerdienstCell'),
+    auszahlung: get('fAuszahlung'),
+    // Verdienst
+    vGesamtBrutto: get('vGesamtBrutto'),
+    vSteuerBrutto: get('vSteuerBrutto'),
+    vLohnsteuer: get('vLohnsteuer'),
+    vKvBeitrag: get('vKvBeitrag'),
+    vRvBeitrag: get('vRvBeitrag'),
+    vAvBeitrag: get('vAvBeitrag'),
+    vPvBeitrag: get('vPvBeitrag'),
+    vSteuerfrei: get('vSteuerfrei'),
+    vSvBrutto: get('vSvBrutto'),
+    // Jahreswerte
+    yGesamtBrutto: get('yGesamtBrutto'),
+    yAuszahlung: get('yAuszahlungCell'),
+    yearSuffix: get('yearSuffix')
+  };
+}
+
+function sendState(frame, stateObj) {
+  frame.contentWindow.postMessage({ type:'setState', state: stateObj }, '*');
+}
+
+function runTests() {
+  const datev = document.getElementById('datevFrame');
+  const lex = document.getElementById('lexFrame');
+
+  // ── TEST 1: März data ──
+  sendState(datev, state);
+  sendState(lex, state);
+
+  setTimeout(() => {
+    const dd = extractData(datev.contentDocument);
+    const ld = extractData(lex.contentDocument);
+
+    addSection('Monthly Totals März');
+    addResult('Monthly Totals März', 'Gesamt-Brutto', dd.gesamtBrutto, ld.gesamtBrutto, 'DATEV', 'Lexware');
+    addResult('Monthly Totals März', 'Steuer-Abzüge', dd.steuerTotal, ld.steuerTotal, 'DATEV', 'Lexware');
+    addResult('Monthly Totals März', 'SV-Abzüge', dd.svTotal, ld.svTotal, 'DATEV', 'Lexware');
+    addResult('Monthly Totals März', 'Netto-Verdienst', dd.nettoVerdienst, ld.nettoVerdienst, 'DATEV', 'Lexware');
+    addResult('Monthly Totals März', 'Auszahlung', dd.auszahlung, ld.auszahlung, 'DATEV', 'Lexware');
+
+    addSection('Verdienstbescheinigung März');
+    addResult('Verdienstbescheinigung März', 'Gesamt-Brutto', dd.vGesamtBrutto, ld.vGesamtBrutto, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'Steuer-Brutto', dd.vSteuerBrutto, ld.vSteuerBrutto, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'Lohnsteuer', dd.vLohnsteuer, ld.vLohnsteuer, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'SV-Brutto', dd.vSvBrutto, ld.vSvBrutto, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'KV-Beitrag', dd.vKvBeitrag, ld.vKvBeitrag, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'RV-Beitrag', dd.vRvBeitrag, ld.vRvBeitrag, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'AV-Beitrag', dd.vAvBeitrag, ld.vAvBeitrag, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'PV-Beitrag', dd.vPvBeitrag, ld.vPvBeitrag, 'DATEV', 'Lexware');
+    addResult('Verdienstbescheinigung März', 'Steuerfreie Bezüge', dd.vSteuerfrei, ld.vSteuerfrei, 'DATEV', 'Lexware');
+
+    addSection('Jahreswerte März');
+    addResult('Jahreswerte März', 'YTD Gesamt-Brutto', dd.yGesamtBrutto, ld.yGesamtBrutto, 'DATEV', 'Lexware');
+    addResult('Jahreswerte März', 'YTD Auszahlung', dd.yAuszahlung, ld.yAuszahlung, 'DATEV', 'Lexware');
+
+    // ── TEST 2: Switch to Juni ──
+    sendState(datev, stateJuni);
+    sendState(lex, stateJuni);
+
+    setTimeout(() => {
+      const dd2 = extractData(datev.contentDocument);
+      const ld2 = extractData(lex.contentDocument);
+
+      addSection('Month Change Juni');
+      addResult('Month Change Juni', 'Gesamt-Brutto', dd2.gesamtBrutto, ld2.gesamtBrutto, 'DATEV', 'Lexware');
+      addResult('Month Change Juni', 'Netto-Verdienst', dd2.nettoVerdienst, ld2.nettoVerdienst, 'DATEV', 'Lexware');
+      addResult('Month Change Juni', 'Auszahlung', dd2.auszahlung, ld2.auszahlung, 'DATEV', 'Lexware');
+
+      addSection('Jahreswerte Juni vs März');
+      // Juni should have different YTD than März (more months)
+      const marchYTD = dd.yGesamtBrutto;
+      const juniYTD = dd2.yGesamtBrutto;
+      const marchSuffix = dd.yearSuffix;
+      const juniSuffix = dd2.yearSuffix;
+      
+      const sec = log.querySelector('#sec_JahreswerteJunivsMärz');
+      const ytdChanged = marchYTD !== juniYTD;
+      if (ytdChanged) passed++; else failed++;
+      sec.innerHTML += `<div class="${ytdChanged?'pass':'fail'}">${ytdChanged?'✅':'❌'} YTD changed: März="${marchYTD}" → Juni="${juniYTD}"</div>`;
+      
+      const suffixChanged = marchSuffix !== juniSuffix;
+      if (suffixChanged) passed++; else failed++;
+      sec.innerHTML += `<div class="${suffixChanged?'pass':'fail'}">${suffixChanged?'✅':'❌'} Suffix changed: März="${marchSuffix}" → Juni="${juniSuffix}"</div>`;
+
+      // Cross-template check for Juni YTD
+      addResult('Jahreswerte Juni vs März', 'Juni YTD Brutto DATEV vs Lexware', dd2.yGesamtBrutto, ld2.yGesamtBrutto, 'DATEV', 'Lexware');
+      addResult('Jahreswerte Juni vs März', 'Juni YTD Auszahlung DATEV vs Lexware', dd2.yAuszahlung, ld2.yAuszahlung, 'DATEV', 'Lexware');
+
+      // Final status
+      const statusEl = document.getElementById('status');
+      if (failed === 0) {
+        statusEl.innerHTML = `✅ ALL ${passed} TESTS PASSED`;
+        statusEl.style.background = '#0f5132'; statusEl.style.color = '#75b798';
+      } else {
+        statusEl.innerHTML = `❌ ${failed} FAILED, ${passed} passed`;
+        statusEl.style.background = '#842029'; statusEl.style.color = '#f5c2c7';
+      }
+    }, 1500);
+  }, 1500);
+}
+
+// Wait for both iframes to be ready
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'templateReady') {
+    if (e.source === document.getElementById('datevFrame').contentWindow) datevReady = true;
+    if (e.source === document.getElementById('lexFrame').contentWindow) lexReady = true;
+    if (datevReady && lexReady) setTimeout(runTests, 500);
+  }
+});
+
+// Fallback if templateReady doesn't fire
+setTimeout(() => { if (!datevReady || !lexReady) runTests(); }, 4000);
+</script>
+</body>
+</html>

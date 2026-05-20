@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
@@ -3066,8 +3066,28 @@
         }
       }
 
+      function autoVerdienst() {
+        const t = computeTotals(state);
+        const steuer = state.steuer && state.steuer[0] ? state.steuer[0] : {};
+        const sv = state.sv && state.sv[0] ? state.sv[0] : {};
+        const v = state.verdienst || (state.verdienst = {});
+        v.gesamtBrutto = formatDE(t.gesamtBrutto);
+        v.steuerBrutto = formatDE(sumSteuerBrutto(state.brutto || []));
+        v.svBrutto = formatDE(sumSVBrutto(state.brutto || []));
+        v.lohnsteuer = steuer.lohnsteuer || "";
+        v.kirchensteuer = steuer.kirchensteuer || "";
+        v.soli = steuer.soli || "";
+        v.kvBeitrag = sv.kvBeitrag || "";
+        v.rvBeitrag = sv.rvBeitrag || "";
+        v.avBeitrag = sv.avBeitrag || "";
+        v.pvBeitrag = sv.pvBeitrag || "";
+        const stFrei = _sumBruttoBy(state.brutto || [], r => /^F$/i.test(r.st || ""));
+        v.steuerfreieBezuege = stFrei > 0 ? formatDE(stFrei) : "";
+      }
+
       function render() {
         applyAutomatik();
+        autoVerdienst();
         renderEditors();
         sendStateToTemplate();
       }
