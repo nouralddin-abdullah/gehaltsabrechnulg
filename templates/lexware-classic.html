@@ -7,7 +7,7 @@
     <style>
       :root {
         --fg: #111; --rule: #555; --bg: #fff;
-        --cap: 6.5pt; --val: 8pt;
+        --cap: 8pt; --val: 9.5pt;
         --mono: Consolas, "Liberation Mono", "Courier New", monospace;
         --sans: Arial, Helvetica, sans-serif;
       }
@@ -18,14 +18,14 @@
 
       .slip {
         background: var(--bg); width: 210mm; min-height: 297mm;
-        padding: 12mm 14mm 10mm 14mm;
+        padding: 10mm 12mm 8mm 12mm;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         font-size: var(--val); color: var(--fg);
       }
       /* ── HEADER ── */
       .slip .header-row { display:grid; grid-template-columns:1fr auto; align-items:baseline; margin-bottom:4mm; }
-      .slip .header-row h1 { font-size:12pt; margin:0; font-weight:700; }
-      .slip .header-row .period { font-size:12pt; font-weight:700; text-align:right; }
+      .slip .header-row h1 { font-size:14pt; margin:0; font-weight:700; }
+      .slip .header-row .period { font-size:14pt; font-weight:700; text-align:right; }
 
       /* ── TOP SECTION: meta + address side by side ── */
       .slip .top-section { display:grid; grid-template-columns:auto 1fr; gap:0; margin-bottom:3mm; }
@@ -39,10 +39,10 @@
       .slip table.meta .val { font-family:var(--mono); font-size:var(--val); }
 
       /* ── ADDRESS BLOCK ── */
-      .slip .addr-block { padding:2mm 0 0 0; font-size:8pt; }
-      .slip .addr-block .firma { font-size:7pt; color:#444; margin-bottom:3mm; }
-      .slip .addr-block .confidential { font-weight:700; margin:3mm 0 1mm 0; font-size:8.5pt; }
-      .slip .addr-block .name-addr { font-size:9pt; line-height:1.4; white-space:pre-line; }
+      .slip .addr-block { padding:2mm 0 0 0; font-size:9.5pt; }
+      .slip .addr-block .firma { font-size:8.5pt; color:#444; margin-bottom:3mm; }
+      .slip .addr-block .confidential { font-weight:700; margin:3mm 0 1mm 0; font-size:10pt; }
+      .slip .addr-block .name-addr { font-size:10.5pt; line-height:1.4; white-space:pre-line; }
 
       /* ── BRUTTO TABLE ── */
       .slip table.brutto { width:100%; border-collapse:collapse; font-size:var(--val); margin-top:3mm; border-top:1px solid var(--rule); }
@@ -60,10 +60,10 @@
         border:1px solid var(--rule); padding:1mm 2mm; min-width:32mm; text-align:right;
       }
       .slip .gesamt-box .lbl { font-size:var(--cap); display:block; text-align:left; }
-      .slip .gesamt-box .val { font-family:var(--mono); font-size:9pt; font-weight:700; }
+      .slip .gesamt-box .val { font-family:var(--mono); font-size:10.5pt; font-weight:700; }
 
       /* ── STEUER / SV SECTION ── */
-      .slip .steuersv-heading { font-size:9pt; font-weight:700; margin:4mm 0 2mm 0; }
+      .slip .steuersv-heading { font-size:11pt; font-weight:700; margin:4mm 0 2mm 0; }
       .slip table.steuersv { width:100%; border-collapse:collapse; font-size:var(--val); }
       .slip table.steuersv th {
         font-weight:400; font-size:var(--cap); text-align:left;
@@ -81,7 +81,7 @@
       .slip table.ytd { border-collapse:collapse; font-size:var(--val); width:100%; }
       .slip table.ytd td { padding:0.3mm 1.5mm; }
       .slip table.ytd td.num { font-family:var(--mono); text-align:right; }
-      .slip table.ytd .heading { font-weight:700; font-size:8pt; padding:1mm 0; }
+      .slip table.ytd .heading { font-weight:700; font-size:10pt; padding:1mm 0; }
 
       /* ── NETTO + BANK ── */
       .slip table.netto { width:100%; border-collapse:collapse; font-size:var(--val); }
@@ -97,10 +97,10 @@
         border:1px solid var(--rule); padding:1mm 2mm; text-align:right; margin-top:1mm;
       }
       .slip .result-box .lbl { font-size:var(--cap); display:block; text-align:left; }
-      .slip .result-box .val { font-family:var(--mono); font-size:9pt; font-weight:700; }
+      .slip .result-box .val { font-family:var(--mono); font-size:10.5pt; font-weight:700; }
 
       /* ── FOOTNOTES ── */
-      .slip .footnotes { margin-top:4mm; font-size:5.5pt; line-height:1.35; color:#333; }
+      .slip .footnotes { margin-top:4mm; font-size:7pt; line-height:1.35; color:#333; }
       .slip .footnotes p { margin:0.5mm 0; }
       .slip .lexware-line { margin-top:3mm; display:grid; grid-template-columns:1fr auto; font-size:6.5pt; color:#555; }
 
