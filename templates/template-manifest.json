@@ -1,4 +1,5 @@
 [
   { "id": "datev-classic", "name": "DATEV Classic", "file": "datev-classic.html" },
-  { "id": "lexware-classic", "name": "Lexware Classic", "file": "lexware-classic.html" }
+  { "id": "lexware-classic", "name": "Lexware Classic", "file": "lexware-classic.html" },
+  { "id": "sage-classic", "name": "Sage Classic", "file": "sage-classic.html" }
 ]

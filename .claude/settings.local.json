@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --test tests/calc.test.mjs tests/lohnsteuer.test.mjs tests/sv.test.mjs tests/pap.test.mjs)"
+    ]
+  }
+}
