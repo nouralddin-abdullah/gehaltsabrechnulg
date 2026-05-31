@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node --test tests/calc.test.mjs tests/lohnsteuer.test.mjs tests/sv.test.mjs tests/pap.test.mjs)"
+      "Bash(node --test tests/calc.test.mjs tests/lohnsteuer.test.mjs tests/sv.test.mjs tests/pap.test.mjs)",
+      "Bash(sed -n '278,2685p' 'C:/Users/sadap/Documents/GitHub/gehaltsabrechnulg/templates/lexware-classic.html')",
+      "Bash(sed -n '2736,2968p' 'C:/Users/sadap/Documents/GitHub/gehaltsabrechnulg/templates/sage-classic.html')"
     ]
   }
 }

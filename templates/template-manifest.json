@@ -1,5 +1,49 @@
 [
-  { "id": "datev-classic", "name": "DATEV Classic", "file": "datev-classic.html" },
-  { "id": "lexware-classic", "name": "Lexware Classic", "file": "lexware-classic.html" },
-  { "id": "sage-classic", "name": "Sage Classic", "file": "sage-classic.html" }
+  {
+    "id": "datev-classic",
+    "name": "DATEV Classic",
+    "file": "datev-classic.html"
+  },
+  {
+    "id": "lexware-classic",
+    "name": "Lexware Classic",
+    "file": "lexware-classic.html"
+  },
+  { "id": "sage-classic", "name": "Sage Classic", "file": "sage-classic.html" },
+  {
+    "id": "viper-classic",
+    "name": "Viper Classic",
+    "file": "viper-classic.html"
+  },
+  { "id": "neon-classic", "name": "Neon Classic", "file": "neon-classic.html" },
+  {
+    "id": "atlas-classic",
+    "name": "Atlas Classic",
+    "file": "atlas-classic.html"
+  },
+  {
+    "id": "aurora-classic",
+    "name": "Aurora Classic",
+    "file": "aurora-classic.html"
+  },
+  {
+    "id": "ledger-classic",
+    "name": "Ledger Classic",
+    "file": "ledger-classic.html"
+  },
+  {
+    "id": "slate-classic",
+    "name": "Slate Classic",
+    "file": "slate-classic.html"
+  },
+  {
+    "id": "prism-classic",
+    "name": "Prism Classic",
+    "file": "prism-classic.html"
+  },
+  {
+    "id": "quartz-classic",
+    "name": "Quartz Classic",
+    "file": "quartz-classic.html"
+  }
 ]
