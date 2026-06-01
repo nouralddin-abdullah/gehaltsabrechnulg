@@ -143,6 +143,17 @@ export function MonthForm({
         </div>
       </fieldset>
 
+      <fieldset className="flex flex-col gap-3">
+        <legend className="text-sm font-medium text-zinc-300">
+          Arbeitgeber-Kosten (optional)
+        </legend>
+        <div className="flex flex-wrap gap-3">
+          <input name="svAgAnteil" placeholder="SV-AG-Anteil" defaultValue={payslip?.data.bank?.svAgAnteil ?? ""} className="cmp-input flex-1" />
+          <input name="zusAgKosten" placeholder="Zus. AG-Kosten" defaultValue={payslip?.data.bank?.zusAgKosten ?? ""} className="cmp-input flex-1" />
+          <input name="gesamtkosten" placeholder="Gesamtkosten" defaultValue={payslip?.data.bank?.gesamtkosten ?? ""} className="cmp-input flex-1" />
+        </div>
+      </fieldset>
+
       <button className="self-start rounded bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400">
         Save month
       </button>

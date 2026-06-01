@@ -33,7 +33,11 @@ export function buildPayslipData(formData: FormData): PayslipData {
     sv: [],
     verdienst: {},
     nettoBezuege: [],
-    bank: {},
+    bank: {
+      svAgAnteil: String(formData.get("svAgAnteil") ?? ""),
+      zusAgKosten: String(formData.get("zusAgKosten") ?? ""),
+      gesamtkosten: String(formData.get("gesamtkosten") ?? ""),
+    },
     meta: {
       druckdatum: String(formData.get("druckdatum") ?? ""),
       blatt: String(formData.get("blatt") ?? "1"),

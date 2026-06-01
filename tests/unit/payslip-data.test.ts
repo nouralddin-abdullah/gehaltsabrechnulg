@@ -33,6 +33,15 @@ describe("buildPayslipData", () => {
     expect(buildPayslipData(fd({ monat: "Mai", jahr: "2026" })).brutto).toEqual([]);
     expect(buildPayslipData(fd({ monat: "Mai", jahr: "2026", brutto_json: "oops" })).brutto).toEqual([]);
   });
+
+  it("captures employer-cost fields into bank", () => {
+    const data = buildPayslipData(
+      fd({ monat: "März", jahr: "2026", svAgAnteil: "100,00", zusAgKosten: "5,00", gesamtkosten: "105,00" }),
+    );
+    expect(data.bank.svAgAnteil).toBe("100,00");
+    expect(data.bank.zusAgKosten).toBe("5,00");
+    expect(data.bank.gesamtkosten).toBe("105,00");
+  });
 });
 
 describe("monthNumber", () => {
