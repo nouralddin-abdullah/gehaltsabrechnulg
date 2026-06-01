@@ -4,6 +4,7 @@ import { listCompanies } from "@/lib/db/companies";
 import { getPayslip, getYearComputedTotals } from "@/lib/db/payslips";
 import { SlipPreview } from "@/components/SlipPreview";
 import { TEMPLATES } from "@/lib/template-manifest";
+import { Breadcrumbs } from "@/components/app-shell/Breadcrumbs";
 
 export default async function PayslipPreviewPage({
   params,
@@ -19,7 +20,6 @@ export default async function PayslipPreviewPage({
   if (!employee || !payslip) notFound();
   const company = companies.find((c) => c.id === employee.company_id) ?? null;
 
-  // captured totals for the year's other months up to and including this one
   const otherMonths = await getYearComputedTotals(
     id,
     payslip.year,
@@ -28,7 +28,14 @@ export default async function PayslipPreviewPage({
   );
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Employees", href: "/dashboard" },
+          { label: employee.name || "(unnamed)", href: `/employees/${id}` },
+          { label: `${payslip.data.zeitraum.monat} ${payslip.data.zeitraum.jahr}` },
+        ]}
+      />
       <SlipPreview
         company={company}
         employee={employee}
@@ -36,6 +43,6 @@ export default async function PayslipPreviewPage({
         templates={TEMPLATES}
         otherMonths={otherMonths}
       />
-    </main>
+    </>
   );
 }

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { listCompanies } from "@/lib/db/companies";
 import { getEmployee } from "@/lib/db/employees";
 import { EmployeeForm } from "@/components/EmployeeForm";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Breadcrumbs } from "@/components/app-shell/Breadcrumbs";
 
 export default async function EditEmployeePage({
   params,
@@ -9,17 +11,19 @@ export default async function EditEmployeePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [companies, employee] = await Promise.all([
-    listCompanies(),
-    getEmployee(id),
-  ]);
+  const [companies, employee] = await Promise.all([listCompanies(), getEmployee(id)]);
   if (!employee) notFound();
   return (
-    <main className="mx-auto max-w-3xl p-10">
-      <h1 className="mb-6 text-2xl font-semibold text-neutral-100">
-        Edit employee
-      </h1>
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Employees", href: "/dashboard" },
+          { label: employee.name || "(unnamed)", href: `/employees/${id}` },
+          { label: "Edit" },
+        ]}
+      />
+      <PageHeader title="Edit employee" />
       <EmployeeForm companies={companies} employee={employee} />
-    </main>
+    </>
   );
 }
