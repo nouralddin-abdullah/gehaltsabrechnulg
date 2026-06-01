@@ -1,6 +1,6 @@
 import { EMPLOYEE_FIELD_GROUPS } from "@/lib/employee-fields";
 import type { Company, Employee } from "@/lib/db/types";
-import { saveEmployee } from "@/app/employees/actions";
+import { saveEmployee } from "@/app/(app)/employees/actions";
 
 function getPath(obj: unknown, path: string): string {
   const [g, k] = path.split(".");

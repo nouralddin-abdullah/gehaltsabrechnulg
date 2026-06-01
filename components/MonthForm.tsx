@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { BruttoRow } from "@/lib/slip-state";
 import { GERMAN_MONTHS } from "@/lib/payslip-data";
-import { createMonth } from "@/app/employees/[id]/payslips/actions";
+import { createMonth } from "@/app/(app)/employees/[id]/payslips/actions";
 
 const EMPTY_ROW: BruttoRow = {
   lohnart: "", bezeichnung: "", einheit: "", menge: "", faktor: "",

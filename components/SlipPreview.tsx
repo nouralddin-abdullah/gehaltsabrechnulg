@@ -11,7 +11,7 @@ import {
   saveComputedTotals,
   issuePayslip,
   changeTemplate,
-} from "@/app/employees/[id]/payslips/actions";
+} from "@/app/(app)/employees/[id]/payslips/actions";
 
 export function SlipPreview({
   company,

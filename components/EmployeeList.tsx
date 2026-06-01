@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Employee } from "@/lib/db/types";
 import { filterEmployees } from "@/lib/employee-data";
-import { deleteEmployee } from "@/app/employees/actions";
+import { deleteEmployee } from "@/app/(app)/employees/actions";
 
 export function EmployeeList({ employees }: { employees: Employee[] }) {
   const [q, setQ] = useState("");
