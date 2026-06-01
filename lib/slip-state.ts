@@ -55,6 +55,16 @@ export interface AutomatikBlock {
   kinder: number; age: number; midijob: boolean; westOst: string;
 }
 
+// True-sum cumulative figures for the "all months worked" block. When present on
+// the state, templates render these instead of the single-month projection.
+export interface CumulativeTotals {
+  monatszahl: number;
+  gesamtBrutto: number; steuerBrutto: number; svBrutto: number;
+  lohnsteuer: number; kirchensteuer: number; soli: number;
+  kvBeitrag: number; rvBeitrag: number; avBeitrag: number; pvBeitrag: number;
+  auszahlung: number;
+}
+
 export interface SlipState {
   meta: SlipMeta;
   firma: string;
@@ -68,4 +78,5 @@ export interface SlipState {
   bank: BankBlock;
   hinweiseZurAbrechnung: string;
   automatik: AutomatikBlock;
+  cumulative?: CumulativeTotals;
 }
