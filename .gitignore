@@ -20,3 +20,8 @@ next-env.d.ts
 
 # Local env
 .env*.local
+
+# Supabase CLI (local link state / secrets)
+supabase/.branches
+supabase/.temp
+supabase/.env
