@@ -51,6 +51,13 @@ export const EMPLOYEE_FIELD_GROUPS: EmployeeFieldGroup[] = [
       { path: "automatik.freibetragMonatlich", label: "Freibetrag mtl.", description: "Monthly tax allowance.", example: "0" },
     ],
   },
+  {
+    title: "Bank",
+    fields: [
+      { path: "bank.name", label: "Bank", description: "Name of the employee's bank (printed in the slip footer).", example: "Deutsche Bank" },
+      { path: "bank.iban", label: "IBAN", description: "Employee's account IBAN — where the net pay is transferred.", example: "DE97 1007 0124 0303 6000 00" },
+    ],
+  },
 ];
 
 // flat list of every field path the form renders

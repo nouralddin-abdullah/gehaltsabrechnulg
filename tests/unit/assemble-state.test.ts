@@ -93,4 +93,24 @@ describe("assembleState", () => {
     expect(s.automatik.age).toBe(28); // born Oct 1997, as of March 2026
     expect(s.automatik.konfession).toBe("rk"); // wired to church-tax calc
   });
+
+  it("maps employee bank (name/IBAN) and the month's employer-cost fields", () => {
+    const emp: Employee = {
+      ...employee,
+      data: { ...employee.data, bank: { name: "Deutsche Bank", iban: "DE97 1007" } },
+    };
+    const ps: Payslip = {
+      ...payslip,
+      data: {
+        ...payslip.data,
+        bank: { svAgAnteil: "100,00", zusAgKosten: "5,00", gesamtkosten: "105,00" },
+      },
+    };
+    const s = assembleState(company, emp, ps, { serial: 80050 });
+    expect(s.bank.name).toBe("Deutsche Bank");
+    expect(s.bank.iban).toBe("DE97 1007");
+    expect(s.bank.svAgAnteil).toBe("100,00");
+    expect(s.bank.gesamtkosten).toBe("105,00");
+    expect(s.bank.code).toBe("80050"); // serial still owns the code box
+  });
 });

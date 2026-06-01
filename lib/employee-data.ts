@@ -26,6 +26,7 @@ export function buildEmployeeData(formData: FormData): EmployeeData {
       midijob: false,
       westOst: "W",
     },
+    bank: { name: "", iban: "" },
   };
 
   for (const [path, raw] of formData.entries()) {

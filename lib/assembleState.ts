@@ -59,6 +59,9 @@ export function assembleState(
   const serial = opts.serial ?? null;
   const bank: BankBlock = {
     ...EMPTY_BANK,
+    // Bank name + IBAN are employee-stable; the month carries the AG-cost fields.
+    name: employee.data.bank?.name ?? "",
+    iban: employee.data.bank?.iban ?? "",
     ...d.bank,
     code: serial != null ? String(serial) : (d.bank?.code ?? ""),
   };

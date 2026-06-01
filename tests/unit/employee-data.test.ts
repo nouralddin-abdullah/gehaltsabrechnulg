@@ -27,6 +27,14 @@ describe("buildEmployeeData", () => {
     expect(data.automatik.kinder).toBe(2);
     expect(data.automatik.midijob).toBe(false); // unchecked checkbox absent
   });
+
+  it("captures employee bank name and IBAN", () => {
+    const data = buildEmployeeData(
+      form({ "bank.name": "Deutsche Bank", "bank.iban": "DE97 1007" }),
+    );
+    expect(data.bank?.name).toBe("Deutsche Bank");
+    expect(data.bank?.iban).toBe("DE97 1007");
+  });
 });
 
 describe("buildEmployeeData date conversion", () => {

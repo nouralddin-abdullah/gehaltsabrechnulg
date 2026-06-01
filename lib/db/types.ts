@@ -32,6 +32,8 @@ export type EmployeeData = {
     midijob: boolean;
     westOst: string;
   };
+  // Employee bank account (printed in the slip footer). Optional for older rows.
+  bank?: { name: string; iban: string };
 };
 
 export type Employee = {
