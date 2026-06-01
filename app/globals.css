@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+html,
+body {
+  background: #09090b; /* zinc-950 */
+  color: #e4e4e7; /* zinc-200 */
+}
+
+.cmp-input {
+  border: 1px solid #2d3138;
+  background: #14171c;
+  color: #e7e9ec;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+}
+.cmp-input:focus {
+  border-color: #6b7280;
+}

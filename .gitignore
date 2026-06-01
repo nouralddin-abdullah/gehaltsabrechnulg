@@ -6,3 +6,22 @@ Thumbs.db
 .vscode/
 .playwright-mcp/
 slip-preview*.png
+
+# Next.js
+.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Local env
+.env*.local
+
+# Supabase CLI (local link state / secrets)
+supabase/.branches
+supabase/.temp
+supabase/.env

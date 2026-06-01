@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gehaltsabrechnung — DATEV HighCopy</title>
+    <style>
+      :root {
+        --ink: #000;
+        --mono: "Courier New", "Cousine", monospace;
+        --sans: Arial, Helvetica, "Liberation Sans", sans-serif;
+        --cap: 8.5px;     /* tiny caption labels */
+        --val: 13px;      /* bold data values   */
+      }
+
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #d9dbdd;
+      }
+      body {
+        font-family: var(--mono);
+        color: var(--ink);
+        -webkit-font-smoothing: none;
+      }
+
+      .sheet {
+        width: 1060px;
+        min-height: 1499px;            /* ~A4 ratio for 1000px content */
+        margin: 24px auto;
+        background: #fff;
+        padding: 26px 30px 18px 30px;
+        position: relative;
+        box-shadow: 0 2px 10px rgba(0,0,0,.25);
+      }
+      .content { width: 1000px; position: relative; }
+
+      /* ---------- generic helpers ---------- */
+      .cap   { font-family: var(--sans); font-size: var(--cap); line-height: 1; white-space: nowrap; }
+      .val   { font-family: var(--mono); font-size: var(--val); font-weight: 700; white-space: nowrap; }
+      .sup   { font-size: .72em; vertical-align: super; line-height: 0; }
+      .r     { text-align: right; }
+      .c     { text-align: center; }
+
+      /* ===================================================== MASTHEAD */
+      .masthead { position: relative; height: 46px; }
+      .mh-title {
+        position: absolute; left: 0; top: 6px;
+        font-family: var(--sans); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+      }
+      .mh-period {
+        position: absolute; left: 410px; top: 7px;
+        font-family: var(--mono); font-weight: 700; font-size: 15px;
+      }
+      .mh-ref {
+        position: absolute; right: 0; top: 0;
+        font-family: var(--mono); font-weight: 700; font-size: 13px;
+      }
+      .mh-ref .roc { margin-right: 26px; }
+      .mh-date {
+        position: absolute; right: 0; top: 22px;
+        font-family: var(--mono); font-weight: 700; font-size: 13px;
+      }
+      .mh-date .blatt { font-family: var(--sans); font-weight: 400; font-size: 11px; }
+
+      /* ===================================================== HEADER GRID (comb) */
+      .header { display: flex; justify-content: space-between; }
+      .h-left  { width: 700px; }
+      .h-right { width: 276px; }
+
+      /* caption row: top rule + short vertical ticks between captions */
+      .crow { display: flex; border-top: 1px solid var(--ink); }
+      .crow > div {
+        font-family: var(--sans); font-size: 8.5px; line-height: 1;
+        padding: 2px 4px 0 4px; height: 14px; white-space: nowrap; overflow: visible;
+        border-left: 1px solid var(--ink); flex: none;
+      }
+      .crow > div:first-child { border-left: none; }
+      /* value row: NO vertical lines (open) */
+      .vrow { display: flex; }
+      .vrow > div {
+        font-family: var(--mono); font-weight: 700; font-size: 13px; line-height: 1;
+        padding: 1px 4px 0 4px; height: 32px; white-space: nowrap; flex: none;
+      }
+      .vrow.close { border-bottom: 1px solid var(--ink); }
+      .crow .sup, .vrow .sup { font-size: .72em; vertical-align: super; line-height: 0; }
+
+      /* eintritt / steuer-id mini grid (right portion of left block) */
+      .mini { display: flex; }
+      .mini .mspacer { width: 537px; flex: none; }
+      .mgrid { width: 163px; }
+      .mgrid .crow { border-top: none; }
+      .mgrid .crow.sep { border-top: 1px solid var(--ink); }
+      .mgrid .crow > div:first-child { border-left: 1px solid var(--ink); }
+
+      /* ===================================================== INFO STRIP */
+      .infostrip { position: relative; height: 64px; margin-top: 6px; }
+      .company {
+        position: absolute; left: 50px; top: 4px;
+        font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .3px;
+      }
+      .persabt {
+        position: absolute; left: 230px; top: 28px;
+        font-family: var(--mono); font-size: 11px; font-weight: 700; line-height: 1.25;
+      }
+      .bn {
+        position: absolute; left: 470px; top: 28px;
+        font-family: var(--mono); font-size: 11px; font-weight: 700; line-height: 1.25;
+      }
+      .hinweise {
+        position: absolute; left: 660px; right: 0; top: 26px;
+        font-family: var(--sans); font-size: 11px; font-weight: 700;
+      }
+      .hinweise::after {
+        content: ""; display: block; border-bottom: 1px solid var(--ink);
+        margin-top: 2px; width: 100%;
+      }
+
+      /* ===================================================== ADDRESS */
+      .address {
+        margin-top: 78px; margin-left: 50px;
+        font-family: var(--mono); font-weight: 700; font-size: 15px; line-height: 1.35;
+      }
+
+      /* ===================================================== BODY / DIVIDER BANDS */
+      .band { display: flex; }
+      .band .left  { width: 840px; position: relative; }
+      .band .sum   { width: 160px; border-left: 1px solid var(--ink); position: relative; padding-left: 8px; }
+      .sum .lbl { font-family: var(--sans); font-size: 9px; font-weight: 700; text-align: right; padding-right: 4px; display:block; }
+      .sum .amt { font-family: var(--mono); font-size: 15px; font-weight: 700; text-align: right; padding-right: 4px; display:block; margin-top: 3px;}
+
+      .sec-label { font-family: var(--sans); font-weight: 700; font-size: 11px; margin: 0 0 1px 0; }
+
+      /* line-item table */
+      table.items { border-collapse: collapse; width: 100%; table-layout: fixed; }
+      table.items th {
+        font-family: var(--sans); font-weight: 400; font-size: 9px;
+        text-align: left; padding: 1px 4px; vertical-align: bottom; white-space: nowrap;
+        border-right: 1px solid var(--ink);
+      }
+      table.items thead tr { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+      table.items td {
+        font-family: var(--mono); font-weight: 700; font-size: 13px;
+        padding: 2px 4px; white-space: nowrap;
+      }
+      .note { font-family: var(--mono); font-weight: 700; font-size: 13px; }
+
+      /* steuer tables */
+      table.tax { border-collapse: collapse; width: 100%; table-layout: fixed; margin-top: 2px;}
+      table.tax th {
+        font-family: var(--sans); font-weight: 700; font-size: 9px;
+        text-align: center; padding: 1px 3px; white-space: nowrap;
+        border-right: 1px solid var(--ink);
+      }
+      table.tax th:first-child, table.tax td:first-child { text-align: left; }
+      table.tax thead tr { border-bottom: 1px solid var(--ink); }
+      table.tax td {
+        font-family: var(--mono); font-weight: 700; font-size: 13px;
+        text-align: center; padding: 1px 6px; white-space: nowrap;
+      }
+
+      .sum-rows .lbl { margin-top: 2px; }
+      .sum-rows .amt { font-size: 14px; }
+      .brutto-amt { font-size: 13px; height: 19px; line-height: 19px; margin: 0; }
+
+      /* verdienst area: NO outer box. Continuous title rule (top via band,
+         bottom via .vb-titles), two full-height internal verticals. */
+      .vb-titles { display: flex; align-items: flex-end; border-bottom: 1px solid var(--ink); }
+      .vb-h1 { font-family: var(--sans); font-weight: 400; font-size: 11px; padding: 2px 0 3px 0; width: 436px; }
+      .vb-h1 b { font-family: var(--mono); font-weight: 700; font-size: 15px; margin-left: 2px; }
+      .vb-h2 { font-family: var(--sans); font-weight: 700; font-size: 11px; padding: 2px 0 3px 0; margin-left: 24px; }
+
+      .verd-body { display: flex; }
+      .verd { display: flex; width: 436px; }
+      .verd .colA { width: 241px; }
+      .verd .colB { width: 195px; border-left: 1px solid var(--ink); border-right: 1px solid var(--ink); }
+      .drow { display: flex; justify-content: space-between; align-items: baseline; height: 25px; padding: 0 0 0 2px; }
+      .drow .k { font-family: var(--sans); font-size: 10px; }
+      .drow .v { font-family: var(--mono); font-weight: 700; font-size: 14px; padding-right: 5px; text-align: right; }
+
+      /* netto-bezüge section: Lohnart|Bezeichnung comb header (rule above comes
+         from the continuous .vb-titles bottom rule) */
+      .nettobox { margin-left: 24px; flex: 1; }
+      .netto-head { display:flex; }
+      .netto-head > div { font-family: var(--sans); font-size: 10px; padding: 2px 6px 3px; border-left: 1px solid var(--ink); }
+      .netto-head > div:first-child { border-left: none; }
+      .netto-row { display: flex; font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 2px 0; }
+      .netto-row .nla { width: 74px; padding-left: 6px; }
+      .netto-row .nbz { flex: 1; }
+
+      /* ===================================================== BANK LINE */
+      .bankband { display:flex; border-top: 1px solid var(--ink); }
+      .bankband .left { width: 840px; display: flex; }
+      .bank-left { width: 470px; }
+      .bank-left .row { display:flex; height: 22px; align-items: baseline; }
+      .bank-left .k { font-family: var(--sans); font-size: 10px; width: 52px; }
+      .bank-left .v { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+      .agcols { width: 380px; }
+      .agcols .heads { display:flex; }
+      .agcols .heads div { font-family: var(--sans); font-size: 9px; font-weight:700; border-left: 1px solid var(--ink); padding: 1px 4px; }
+      .agcols .vals { display:flex; }
+      .agcols .vals div { font-family: var(--mono); font-weight:700; font-size: 14px; padding: 2px 4px; text-align:center; }
+
+      /* ===================================================== FOOTNOTES */
+      .foot { margin-top: 10px; border-top: 1px solid var(--ink); padding-top: 4px; position: relative; min-height: 96px; }
+      .foot .cols { display: flex; gap: 26px; font-family: var(--sans); font-size: 8.5px; line-height: 1.45; }
+      .foot .cols sup { font-size: .8em; }
+      .foot .col1 { width: 360px; }
+      .foot .col2 { width: 330px; }
+      .foot .col3 { width: 300px; }
+
+      .footline { display:flex; justify-content: space-between; align-items: flex-end; margin-top: 12px; }
+      .afp { font-family: var(--sans); font-size: 9px; }
+      .legal { font-family: var(--sans); font-size: 9px; }
+      .datev-logo {
+        font-family: var(--sans); font-weight: 800; font-size: 26px; letter-spacing: 1px;
+        position: absolute; right: 0; bottom: 0;
+      }
+      .barcode {
+        position: absolute; right: 0; bottom: 34px; width: 120px; height: 38px;
+        background: repeating-linear-gradient(90deg,#000 0 2px,#fff 2px 4px,#000 4px 5px,#fff 5px 8px);
+      }
+
+      @media print {
+        html, body { background: #fff; }
+        .sheet { margin: 0; box-shadow: none; }
+        @page { size: A4; margin: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="content">
+
+        <!-- ============================= MASTHEAD ============================= -->
+        <div class="masthead">
+          <div class="mh-title">Abrechnung der Brutto/Netto-Bezüge</div>
+          <div class="mh-period" id="hcPeriod"></div>
+          <div class="mh-ref" id="hcRef"></div>
+          <div class="mh-date" id="hcDate"></div>
+        </div>
+
+        <!-- ============================= HEADER GRID ============================= -->
+        <div class="header">
+          <div class="h-left">
+            <!-- row 1 -->
+            <div class="crow">
+              <div style="width:68px">Personal-Nr.</div>
+              <div style="width:81px">Geburtsdatum</div>
+              <div style="width:23px">StKl</div>
+              <div style="width:58px">Faktor</div>
+              <div style="width:46px">Ki.Frbtr.</div>
+              <div style="width:69px">Konfession</div>
+              <div style="width:98px">Freibetrag jährl.<sup class="sup">1</sup></div>
+              <div style="width:94px">Freibetrag mtl.<sup class="sup">1</sup></div>
+              <div style="width:50px">DBA</div>
+              <div style="width:81px">Midijob</div>
+              <div style="width:32px">St.-Tg.</div>
+            </div>
+            <div class="vrow">
+              <div style="width:68px" data-f="persNr"></div>
+              <div style="width:81px" data-f="geburtsdatum"></div>
+              <div style="width:23px" data-f="stKl"></div>
+              <div style="width:58px" data-f="faktor"></div>
+              <div style="width:46px" data-f="kiFrbtr"></div>
+              <div style="width:69px" data-f="konfession"></div>
+              <div style="width:98px" data-f="freibetragJ"></div>
+              <div style="width:94px" data-f="freibetragM"></div>
+              <div style="width:50px" data-f="dba"></div>
+              <div style="width:81px" data-f="midijob"></div>
+              <div style="width:32px" data-f="stTg"></div>
+            </div>
+            <!-- row 2 -->
+            <div class="crow">
+              <div style="width:149px">SV-Nummer</div>
+              <div style="width:345px">Krankenkasse</div>
+              <div style="width:43px">KK %<sup class="sup">8</sup></div>
+              <div style="width:49px">PGRS</div>
+              <div style="width:58px">BGRS</div>
+              <div style="width:23px">Um.</div>
+              <div style="width:33px">SV-Tg.</div>
+            </div>
+            <div class="vrow close">
+              <div style="width:149px" data-f="svNummer"></div>
+              <div style="width:345px" data-f="krankenkasse"></div>
+              <div style="width:43px" data-f="kkProzent"></div>
+              <div style="width:49px" data-f="pgrs"></div>
+              <div style="width:58px" data-f="bgrs"></div>
+              <div style="width:23px" data-f="um"></div>
+              <div style="width:33px" data-f="umSvTg"></div>
+            </div>
+            <!-- eintritt / steuer-id -->
+            <div class="mini">
+              <div class="mspacer"></div>
+              <div class="mgrid">
+                <div class="crow">
+                  <div style="width:80px">Eintritt</div>
+                  <div style="width:83px">Austritt</div>
+                </div>
+                <div class="vrow">
+                  <div style="width:80px" data-f="eintritt"></div>
+                  <div style="width:83px" data-f="austritt"></div>
+                </div>
+                <div class="crow sep">
+                  <div style="width:120px">Steuer-ID</div>
+                  <div style="width:43px">MFB<sup class="sup">7</sup></div>
+                </div>
+                <div class="vrow close">
+                  <div style="width:120px" data-f="steuerId"></div>
+                  <div style="width:43px" data-f="mfb"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-right">
+            <div class="crow">
+              <div style="width:69px">VJ Url. üb.</div>
+              <div style="width:69px">Url. Anspr.</div>
+              <div style="width:69px">Url.Tg.gen.</div>
+              <div style="width:69px">Resturlaub</div>
+            </div>
+            <div class="vrow">
+              <div style="width:69px" data-f="vjUrlUeb"></div><div style="width:69px" data-f="urlAnspr"></div>
+              <div style="width:69px" data-f="urlTgGen"></div><div style="width:69px" data-f="resturlaub"></div>
+            </div>
+            <div class="crow">
+              <div style="width:69px">Anw. Tage</div>
+              <div style="width:69px">Urlaub Tage</div>
+              <div style="width:69px">Krankh. Tg.</div>
+              <div style="width:69px">Fehlz. Tage</div>
+            </div>
+            <div class="vrow">
+              <div style="width:69px" data-f="anwTage"></div><div style="width:69px" data-f="urlaubTage"></div>
+              <div style="width:69px" data-f="krankhTg"></div><div style="width:69px" data-f="fehlzTage"></div>
+            </div>
+            <div class="crow">
+              <div style="width:69px">Anw. Std.</div>
+              <div style="width:69px">Urlaub Std.</div>
+              <div style="width:69px">Krankh. Std.</div>
+              <div style="width:69px">Fehlz. Std.</div>
+            </div>
+            <div class="vrow">
+              <div style="width:69px" data-f="anwStd"></div><div style="width:69px" data-f="urlaubStd"></div>
+              <div style="width:69px" data-f="krankhStd"></div><div style="width:69px" data-f="fehlzStd"></div>
+            </div>
+            <div class="crow">
+              <div style="width:69px"></div>
+              <div style="width:69px">Zeitlohn Std.</div>
+              <div style="width:69px">Überstd.</div>
+              <div style="width:69px">Bez. Std.</div>
+            </div>
+            <div class="vrow close">
+              <div style="width:69px"></div><div style="width:69px" data-f="zeitlohnStd"></div>
+              <div style="width:69px" data-f="ueberstd"></div><div style="width:69px" data-f="bezStd"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================= INFO STRIP ============================= -->
+        <div class="infostrip">
+          <div class="company" id="hcCompany"></div>
+          <div class="persabt" id="hcPersAbt"></div>
+          <div class="bn" id="hcBn"></div>
+          <div class="hinweise">Hinweise zur Abrechnung</div>
+        </div>
+
+        <!-- ============================= ADDRESS ============================= -->
+        <div class="address" id="hcAddress"></div>
+
+        <!-- ============================= BRUTTO-BEZÜGE ============================= -->
+        <div class="band" style="margin-top:40px;">
+          <div class="left">
+            <div class="sec-label">Brutto-Bezüge</div>
+            <table class="items" style="width:827px;">
+              <colgroup>
+                <col style="width:56px"><col style="width:360px"><col style="width:74px">
+                <col style="width:100px"><col style="width:64px"><col style="width:77px">
+                <col style="width:32px"><col style="width:32px"><col style="width:32px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Lohnart</th>
+                  <th>Bezeichnung</th>
+                  <th class="c">Einheit<sup>2</sup></th>
+                  <th class="r">Menge<sup>3</sup></th>
+                  <th class="r">Faktor<sup>3</sup></th>
+                  <th>Prozentsatz</th>
+                  <th class="c">St<sup>4</sup></th>
+                  <th class="c">SV<sup>4</sup></th>
+                  <th class="c">GB<sup>5</sup></th>
+                </tr>
+              </thead>
+              <tbody id="hcBruttoBody"></tbody>
+            </table>
+            <div style="height:300px"></div>
+          </div>
+          <div class="sum" style="display:flex; flex-direction:column;">
+            <div style="height:14px;"></div>
+            <div class="lbl" style="border-top:1px solid #000; border-bottom:1px solid #000; padding:2px 4px;">Betrag</div>
+            <div id="hcBruttoAmts"></div>
+            <div style="flex:1"></div>
+            <div class="lbl" style="border-top:1px solid #000; padding-top:3px;">Gesamt-Brutto</div>
+            <div class="amt" id="hcGesamtBrutto"></div>
+          </div>
+        </div>
+
+        <!-- ============================= STEUER / SV ============================= -->
+        <div class="band" style="border-top:1px solid #000;">
+          <div class="left">
+            <div class="sec-label" style="margin-top:2px;">Steuer/Sozialversicherung</div>
+            <table class="tax">
+              <colgroup>
+                <col style="width:60px"><col style="width:170px"><col style="width:150px">
+                <col style="width:150px"><col style="width:220px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>St<sup>4</sup></th>
+                  <th class="c">Steuer-Brutto</th>
+                  <th class="c">Lohnsteuer</th>
+                  <th class="c">Kirchensteuer</th>
+                  <th class="c">Solidaritätszuschlag</th>
+                </tr>
+              </thead>
+              <tbody id="hcSteuerBody"></tbody>
+            </table>
+
+            <table class="tax" style="margin-top:8px;">
+              <colgroup>
+                <col style="width:54px"><col style="width:96px"><col style="width:96px">
+                <col style="width:96px"><col style="width:96px"><col style="width:96px">
+                <col style="width:96px"><col style="width:80px"><col style="width:96px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>SV<sup>4</sup></th>
+                  <th class="c">KV-Brutto</th>
+                  <th class="c">RV-Brutto</th>
+                  <th class="c">AV-Brutto</th>
+                  <th class="c">PV-Brutto</th>
+                  <th class="c">KV-Beitrag</th>
+                  <th class="c">RV-Beitrag</th>
+                  <th class="c">AV-Beitrag</th>
+                  <th class="c">PV-Beitrag<sup>6</sup></th>
+                </tr>
+              </thead>
+              <tbody id="hcSvBody"></tbody>
+            </table>
+          </div>
+
+          <div class="sum sum-rows">
+            <div style="height:17px;"></div>
+            <div class="lbl">Steuerrechtliche Abzüge</div>
+            <div id="hcSteuerAbz"></div>
+            <div style="height:11px;"></div>
+            <div class="lbl" style="border-top:1px solid #000; padding-top:2px;">SV-rechtliche Abzüge</div>
+            <div id="hcSvAbz"></div>
+          </div>
+        </div>
+
+        <!-- ============================= VERDIENSTBESCHEINIGUNG / NETTO ============================= -->
+        <div class="band" style="border-top:1px solid #000;">
+          <div class="left">
+            <div class="vb-titles">
+              <div class="vb-h1">Verdienstbescheinigung<b id="hcVerdSuffix"></b></div>
+              <div class="vb-h2">Netto-Bezüge/Netto-Abzüge</div>
+            </div>
+            <div class="verd-body">
+              <div class="verd">
+                <div class="colA">
+                  <div class="drow"><span class="k">Gesamt-Brutto</span><span class="v" data-v="gesamtBrutto"></span></div>
+                  <div class="drow"><span class="k">Steuer-Brutto</span><span class="v" data-v="steuerBrutto"></span></div>
+                  <div class="drow"><span class="k">Lohnsteuer</span><span class="v" data-v="lohnsteuer"></span></div>
+                  <div class="drow"><span class="k">Kirchensteuer</span><span class="v" data-v="kirchensteuer"></span></div>
+                  <div class="drow"><span class="k">Solidaritätszuschlag</span><span class="v" data-v="soli"></span></div>
+                  <div class="drow"><span class="k">Steuerfreie Bezüge</span><span class="v" data-v="steuerfreieBezuege"></span></div>
+                  <div class="drow"><span class="k">P. verst. Zuk.sich.</span><span class="v" data-v="pVerstZukSich"></span></div>
+                  <div class="drow"><span class="k">&nbsp;</span><span class="v">&nbsp;</span></div>
+                  <div class="drow"><span class="k">Pfändung Rest</span><span class="v" data-v="pfaendungRest"></span></div>
+                  <div class="drow"><span class="k">Darlehen Rest</span><span class="v" data-v="darlehenRest"></span></div>
+                </div>
+                <div class="colB">
+                  <div class="drow"><span class="k">SV-Brutto</span><span class="v" data-v="svBrutto"></span></div>
+                  <div class="drow"><span class="k">KV-Beitrag</span><span class="v" data-v="kvBeitrag"></span></div>
+                  <div class="drow"><span class="k">RV-Beitrag</span><span class="v" data-v="rvBeitrag"></span></div>
+                  <div class="drow"><span class="k">AV-Beitrag</span><span class="v" data-v="avBeitrag"></span></div>
+                  <div class="drow"><span class="k">PV-Beitrag</span><span class="v" data-v="pvBeitrag"></span></div>
+                  <div class="drow"><span class="k">VWL gesamt</span><span class="v" data-v="vwlGesamt"></span></div>
+                  <div class="drow"><span class="k">Kug-Auszahlung</span><span class="v" data-v="kugAuszahlung"></span></div>
+                  <div class="drow"><span class="k">&nbsp;</span><span class="v">&nbsp;</span></div>
+                  <div class="drow"><span class="k">&nbsp;</span><span class="v">&nbsp;</span></div>
+                  <div class="drow"><span class="k">&nbsp;</span><span class="v">&nbsp;</span></div>
+                </div>
+              </div>
+              <div class="nettobox">
+                <div class="netto-head">
+                  <div style="width:74px">Lohnart</div>
+                  <div>Bezeichnung</div>
+                </div>
+                <div id="hcNettoRows"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sum">
+            <div class="lbl" style="padding-top:2px;">Netto-Verdienst</div>
+            <div class="amt" id="hcNettoVerdienst"></div>
+            <div class="lbl" style="border-top:1px solid #000; padding-top:3px; margin-top:8px;">Betrag</div>
+            <div id="hcNettoAmts"></div>
+          </div>
+        </div>
+
+        <!-- ============================= BANK LINE ============================= -->
+        <div class="bankband">
+          <div class="left">
+            <div class="bank-left">
+              <div class="row"><span class="k">Bank</span><span class="v" id="hcBankName"></span></div>
+              <div class="row"><span class="k">Konto</span><span class="v" id="hcBankIban"></span></div>
+            </div>
+            <div class="agcols">
+              <div class="heads">
+                <div style="width:120px">SV-AG-Anteil</div>
+                <div style="width:120px">Zus. AG-Kosten</div>
+                <div style="width:138px">Gesamtkosten</div>
+              </div>
+              <div class="vals">
+                <div style="width:120px" id="hcSvAg"></div>
+                <div style="width:120px" id="hcZusAg"></div>
+                <div style="width:138px" id="hcGesamtkosten"></div>
+              </div>
+            </div>
+          </div>
+          <div class="sum">
+            <div class="lbl" style="font-size:10px;">Auszahlungsbetrag</div>
+            <div class="amt" id="hcAuszahlung"></div>
+          </div>
+        </div>
+
+        <!-- ============================= FOOTNOTES ============================= -->
+        <div class="foot">
+          <div class="cols">
+            <div class="col1">
+              <div><sup>1</sup> H = Hinzurechnungsbetrag</div>
+              <div><sup>2</sup> Std = Stunden, T = Tage, Km = Kilometer, St = Stück</div>
+              <div>&nbsp;&nbsp;&nbsp;EUR = Euro, Tsd = Tausend Euro, Mio = Million Euro</div>
+              <div><sup>3</sup> Gegebenenfalls Netto-Lohn/Netto-Stundenlohn</div>
+            </div>
+            <div class="col2">
+              <div><sup>4</sup> L = Laufender Bezug, S = Sonstiger Bezug, F = Frei,</div>
+              <div>&nbsp;&nbsp;&nbsp;E = Einmalbezug, P = Pauschalierung, A = Abfindung,</div>
+              <div>&nbsp;&nbsp;&nbsp;M = mehrjährige Versteuerung, N = Nachberechnung</div>
+              <div>&nbsp;&nbsp;&nbsp;V = Vorjahr, W = Entgeltguthaben</div>
+            </div>
+            <div class="col3">
+              <div><sup>5</sup> J = Bestandteil des Gesamt-Bruttos</div>
+              <div><sup>6</sup> Z = Einschl. Beitragszuschlag zur PV für Kinderlose</div>
+              <div><sup>7</sup> MFB = Mehrfachbeschäftigung</div>
+              <div><sup>8</sup> Maßgeblicher Beitragssatz zur KV inkl. Zusatzbeitrag</div>
+            </div>
+          </div>
+
+          <div class="barcode"></div>
+          <div class="footline">
+            <div class="afp">AFP Form.-Nr. LNGN14</div>
+            <div class="legal">- Dies ist eine Entgeltbescheinigung nach § 108 Abs. 3 Satz 1 der Gewerbeordnung -</div>
+            <div style="width:120px"></div>
+          </div>
+          <div class="datev-logo">DATEV</div>
+        </div>
+
+      </div>
+    </div>
+
+    <script>
+      /* ============================================================= helpers */
+      const _fmt = new Intl.NumberFormat("de-DE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      function parseDE(input) {
+        if (typeof input === "number") return input;
+        if (input == null) return null;
+        const s = String(input).trim();
+        if (s === "") return null;
+        const n = Number(s.replace(/\./g, "").replace(",", "."));
+        return Number.isFinite(n) ? n : null;
+      }
+      function formatDE(n) {
+        if (n == null || !Number.isFinite(n)) return "";
+        return _fmt.format(n);
+      }
+      function esc(s) {
+        return String(s ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      function fmtDateComma(s) {
+        if (!s) return "";
+        s = String(s).trim();
+        if (/^\d{6}$/.test(s)) return s.slice(0, 2) + "," + s.slice(2, 4) + "," + s.slice(4, 6);
+        return s;
+      }
+
+      function computeRowBetrag(row) {
+        if (row.hinweis) return null;
+        const explicit = parseDE(row.betrag);
+        if (explicit != null) return explicit;
+        const menge = parseDE(row.menge);
+        const faktor = parseDE(row.faktor);
+        if (menge == null || faktor == null) return null;
+        return Math.round(menge * faktor * 100) / 100;
+      }
+      function sumBrutto(rows) {
+        let total = 0;
+        for (const r of rows) {
+          if (r.hinweis) continue;
+          if ((r.gb || "").toUpperCase() !== "J") continue;
+          const b = computeRowBetrag(r);
+          if (b != null) total += b;
+        }
+        return Math.round(total * 100) / 100;
+      }
+      function rowSum(r, fields) {
+        let t = 0;
+        for (const f of fields) {
+          const v = parseDE(r[f]);
+          if (v != null) t += v;
+        }
+        return Math.round(t * 100) / 100;
+      }
+      function _sumFields(rows, fields) {
+        let total = 0;
+        for (const r of rows) total += rowSum(r, fields);
+        return Math.round(total * 100) / 100;
+      }
+      function _sumBetrag(rows) {
+        let total = 0;
+        for (const r of rows) {
+          const v = parseDE(r.betrag);
+          if (v != null) total += v;
+        }
+        return Math.round(total * 100) / 100;
+      }
+      function computeTotals(s) {
+        const gesamtBrutto = sumBrutto(s.brutto || []);
+        const steuerAbzuege = _sumFields(s.steuer || [], ["lohnsteuer", "kirchensteuer", "soli"]);
+        const svAbzuege = _sumFields(s.sv || [], ["kvBeitrag", "rvBeitrag", "avBeitrag", "pvBeitrag"]);
+        const nettoSaldo = _sumBetrag(s.nettoBezuege || []);
+        const nettoVerdienst = Math.round((gesamtBrutto - steuerAbzuege - svAbzuege) * 100) / 100;
+        const auszahlungsbetrag = Math.round((nettoVerdienst + nettoSaldo) * 100) / 100;
+        return { gesamtBrutto, steuerAbzuege, svAbzuege, nettoVerdienst, auszahlungsbetrag };
+      }
+
+      /* ============================================================= default state
+         (Oktober 2023 sample — exactly reproduces the approved layout when the
+         file is opened standalone; replaced by the host via postMessage) */
+      const state = {
+        meta: {
+          persNr: "00107", geburtsdatum: "021097", stKl: "1", faktor: "",
+          kiFrbtr: "", konfession: "", freibetragJ: "", freibetragM: "", dba: "",
+          midijob: "Ja", stTg: "30",
+          svNummer: "25021097A060", krankenkasse: "AOK Sachsen-Anhalt", kkProzent: "",
+          pgrs: "106", bgrs: "0100", um: "2", umSvTg: "30",
+          eintritt: "290719", austritt: "", steuerId: "15270956832", mfb: "",
+          rocCode: "R0C", mandant: "133267/30605/00107", druckdatum: "23.10.2023", blatt: "1",
+          persNrBox: "00107", abtNr: "1", bn: "B/N", mandantBox: "30605",
+          vjUrlUeb: "", urlAnspr: "", urlTgGen: "", resturlaub: "",
+          anwTage: "", urlaubTage: "", krankhTg: "", fehlzTage: "",
+          anwStd: "", urlaubStd: "", krankhStd: "", fehlzStd: "",
+          zeitlohnStd: "", ueberstd: "", bezStd: "",
+        },
+        firma: "ILS Integrated Lab Solutions GmbH*Barbara-McClintock-Straße 11*12489 Berlin",
+        mitarbeiter: {
+          name: "Yacoub Youssef Abu Naaj",
+          strasse: "Joachimsthaler Str. 6",
+          plzOrt: "13055 Berlin",
+        },
+        zeitraum: { monat: "Oktober", jahr: "2023" },
+        brutto: [
+          { lohnart: "1000", bezeichnung: "Stundenlohn", einheit: "Std", menge: "79,75", faktor: "20,00", prozent: "", st: "L", sv: "L", gb: "J" },
+          { lohnart: "1012", bezeichnung: "Feiertagslohn", einheit: "Std", menge: "8,00", faktor: "20,00", prozent: "", st: "L", sv: "L", gb: "J" },
+          { hinweis: true, text: "Nachberechnung 09/2023:   - Midijob nicht angewandt -" },
+          { lohnart: "1000", bezeichnung: "Stundenlohn", einheit: "Std", menge: "90,50", faktor: "20,00", prozent: "", st: "L", sv: "L", gb: "J" },
+        ],
+        steuer: [
+          { tag: "L", steuerBrutto: "1.755,00", lohnsteuer: "79,25", kirchensteuer: "", soli: "" },
+          { tag: "N", steuerBrutto: "1.810,00", lohnsteuer: "441,75", kirchensteuer: "", soli: "" },
+        ],
+        sv: [
+          { tag: "L", kvBrutto: "", rvBrutto: "1.668,92", avBrutto: "", pvBrutto: "", kvBeitrag: "", rvBeitrag: "155,21", avBeitrag: "Z", pvBeitrag: "" },
+          { tag: "N", kvBrutto: "", rvBrutto: "1.854,34", avBrutto: "", pvBrutto: "", kvBeitrag: "", rvBeitrag: "181,73", avBeitrag: "Z", pvBeitrag: "" },
+        ],
+        verdienst: {
+          nachberechnungVorjahr: true,
+          gesamtBrutto: "19.251,00", steuerBrutto: "19.251,00", lohnsteuer: "1.397,48",
+          kirchensteuer: "", soli: "", steuerfreieBezuege: "", pVerstZukSich: "",
+          pfaendungRest: "", darlehenRest: "",
+          svBrutto: "18.843,26", kvBeitrag: "", rvBeitrag: "1.668,11", avBeitrag: "",
+          pvBeitrag: "", vwlGesamt: "", kugAuszahlung: "",
+        },
+        nettoBezuege: [],
+        bank: {
+          name: "Deutsche Bank", iban: "DE97 1007 0124 0303 6XXX XX",
+          svAgAnteil: "329,46", zusAgKosten: "", gesamtkosten: "", code: "",
+        },
+        hinweiseZurAbrechnung: "",
+      };
+
+      /* ============================================================= render */
+      const $ = (id) => document.getElementById(id);
+      const DATE_FIELDS = new Set(["geburtsdatum", "eintritt", "austritt"]);
+
+      function renderMasthead() {
+        const z = state.zeitraum || {}, m = state.meta || {};
+        $("hcPeriod").textContent = `für ${z.monat || ""} ${z.jahr || ""}`.trim();
+        $("hcRef").innerHTML = `<span class="roc">${esc(m.rocCode)}</span>${esc(m.mandant)}`;
+        $("hcDate").innerHTML =
+          `${esc(m.druckdatum)}&nbsp;&nbsp;&nbsp;<span class="blatt">Blatt:</span>&nbsp;&nbsp;${esc(m.blatt)}`;
+      }
+
+      function renderHeaderFields() {
+        const m = state.meta || {};
+        document.querySelectorAll("[data-f]").forEach((el) => {
+          const k = el.dataset.f;
+          let v = m[k] ?? "";
+          if (DATE_FIELDS.has(k)) v = fmtDateComma(v);
+          el.textContent = v;
+        });
+      }
+
+      function renderInfostrip() {
+        const m = state.meta || {};
+        $("hcCompany").textContent = state.firma || "";
+        $("hcPersAbt").innerHTML = `*Pers.-Nr. ${esc(m.persNrBox)}*<br>*Abt.-Nr. ${esc(m.abtNr)}*`;
+        $("hcBn").innerHTML = `${esc(m.bn)}<br>${esc(m.rocCode)}<br>${esc(m.mandantBox)}`;
+      }
+
+      function renderAddress() {
+        const a = state.mitarbeiter || {};
+        $("hcAddress").innerHTML = `${esc(a.name)}<br>${esc(a.strasse)}<br>${esc(a.plzOrt)}`;
+      }
+
+      function renderBrutto() {
+        const tb = $("hcBruttoBody"); tb.innerHTML = "";
+        const amts = $("hcBruttoAmts"); amts.innerHTML = "";
+        for (const r of state.brutto || []) {
+          const tr = document.createElement("tr");
+          if (r.hinweis) {
+            tr.innerHTML = `<td></td><td colspan="8" class="note">${esc(r.text)}</td>`;
+            amts.insertAdjacentHTML("beforeend", `<div class="amt brutto-amt">&nbsp;</div>`);
+          } else {
+            const betrag = computeRowBetrag(r);
+            tr.innerHTML =
+              `<td>${esc(r.lohnart)}</td><td>${esc(r.bezeichnung)}</td>` +
+              `<td class="c">${esc(r.einheit)}</td><td class="r">${esc(r.menge)}</td>` +
+              `<td class="r">${esc(r.faktor)}</td><td>${esc(r.prozent)}</td>` +
+              `<td class="c">${esc(r.st)}</td><td class="c">${esc(r.sv)}</td><td class="c">${esc(r.gb)}</td>`;
+            amts.insertAdjacentHTML("beforeend",
+              `<div class="amt brutto-amt">${formatDE(betrag) || "&nbsp;"}</div>`);
+          }
+          tb.appendChild(tr);
+        }
+        $("hcGesamtBrutto").textContent = formatDE(computeTotals(state).gesamtBrutto);
+      }
+
+      function renderSteuerSV() {
+        const amtStyle = 'style="font-size:14px;height:17px;line-height:17px;margin:0;"';
+        const sb = $("hcSteuerBody"); sb.innerHTML = "";
+        const sa = $("hcSteuerAbz"); sa.innerHTML = "";
+        for (const r of state.steuer || []) {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            `<td>${esc(r.tag)}</td><td class="r">${esc(r.steuerBrutto)}</td>` +
+            `<td class="r">${esc(r.lohnsteuer)}</td><td class="r">${esc(r.kirchensteuer)}</td>` +
+            `<td class="r">${esc(r.soli)}</td>`;
+          sb.appendChild(tr);
+          const ab = rowSum(r, ["lohnsteuer", "kirchensteuer", "soli"]);
+          sa.insertAdjacentHTML("beforeend",
+            `<div class="amt" ${amtStyle}>${ab ? formatDE(ab) : "&nbsp;"}</div>`);
+        }
+        const vb = $("hcSvBody"); vb.innerHTML = "";
+        const va = $("hcSvAbz"); va.innerHTML = "";
+        for (const r of state.sv || []) {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            `<td>${esc(r.tag)}</td><td class="r">${esc(r.kvBrutto)}</td>` +
+            `<td class="r">${esc(r.rvBrutto)}</td><td class="r">${esc(r.avBrutto)}</td>` +
+            `<td class="r">${esc(r.pvBrutto)}</td><td class="r">${esc(r.kvBeitrag)}</td>` +
+            `<td class="r">${esc(r.rvBeitrag)}</td><td class="c">${esc(r.avBeitrag)}</td>` +
+            `<td class="r">${esc(r.pvBeitrag)}</td>`;
+          vb.appendChild(tr);
+          const ab = rowSum(r, ["kvBeitrag", "rvBeitrag", "avBeitrag", "pvBeitrag"]);
+          va.insertAdjacentHTML("beforeend",
+            `<div class="amt" ${amtStyle}>${ab ? formatDE(ab) : "&nbsp;"}</div>`);
+        }
+      }
+
+      function renderVerdienst() {
+        const v = state.verdienst || {};
+        $("hcVerdSuffix").textContent = v.nachberechnungVorjahr ? "mit Nachberechnung Vorjahr" : "";
+        document.querySelectorAll("[data-v]").forEach((el) => {
+          el.textContent = v[el.dataset.v] ?? "";
+        });
+
+        const nr = $("hcNettoRows"); nr.innerHTML = "";
+        const na = $("hcNettoAmts"); na.innerHTML = "";
+        for (const r of state.nettoBezuege || []) {
+          nr.insertAdjacentHTML("beforeend",
+            `<div class="netto-row"><span class="nla">${esc(r.lohnart)}</span><span class="nbz">${esc(r.bezeichnung)}</span></div>`);
+          na.insertAdjacentHTML("beforeend",
+            `<div class="amt" style="font-size:14px;height:21px;line-height:21px;margin:0;">${formatDE(parseDE(r.betrag)) || "&nbsp;"}</div>`);
+        }
+
+        $("hcNettoVerdienst").textContent = formatDE(computeTotals(state).nettoVerdienst);
+      }
+
+      function renderBank() {
+        const b = state.bank || {}, t = computeTotals(state);
+        $("hcBankName").textContent = b.name || "";
+        $("hcBankIban").textContent = b.iban || "";
+        $("hcSvAg").textContent = b.svAgAnteil || "";
+        $("hcZusAg").textContent = b.zusAgKosten || "";
+        $("hcGesamtkosten").textContent = b.gesamtkosten || "";
+        $("hcAuszahlung").textContent = formatDE(t.auszahlungsbetrag);
+      }
+
+      function render() {
+        renderMasthead();
+        renderHeaderFields();
+        renderInfostrip();
+        renderAddress();
+        renderBrutto();
+        renderSteuerSV();
+        renderVerdienst();
+        renderBank();
+      }
+
+      /* ============================================================= iframe bridge */
+      window.addEventListener("message", (e) => {
+        if (e.data && e.data.type === "setState") {
+          for (const k of Object.keys(state)) delete state[k];
+          Object.assign(state, e.data.state);
+          render();
+        }
+      });
+
+      document.addEventListener("DOMContentLoaded", () => {
+        render();
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: "templateReady" }, "*");
+        }
+      });
+    </script>
+  </body>
+</html>

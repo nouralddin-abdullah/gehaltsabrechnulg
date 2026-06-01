@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html,body{margin:0;padding:0;background:#fff;}
+      #wrap{display:flex;flex-direction:column;align-items:flex-start;}
+      canvas{display:block;}
+      #status{font-family:monospace;font-size:14px;padding:6px;color:#a00;}
+    </style>
+    <script src="/node_modules/pdfjs-dist/build/pdf.min.js"></script>
+  </head>
+  <body>
+    <div id="status">loading…</div>
+    <div id="wrap"></div>
+    <script>
+      (async () => {
+        const status = document.getElementById("status");
+        try {
+          const pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "/node_modules/pdfjs-dist/build/pdf.worker.min.js";
+          const params = new URLSearchParams(location.search);
+          const url = params.get("file");
+          const scale = parseFloat(params.get("scale") || "2.2");
+          const buf = await (await fetch(url)).arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+
+          // optional crop+zoom: crop=cx,cy,cw,ch  zoom=N
+          const crop = params.get("crop");
+          const zoom = parseFloat(params.get("zoom") || "1");
+          const wrap = document.getElementById("wrap");
+          if (crop) {
+            const [cx, cy, cw, ch] = crop.split(",").map(Number);
+            const out = document.createElement("canvas");
+            out.width = cw * zoom;
+            out.height = ch * zoom;
+            const octx = out.getContext("2d");
+            octx.imageSmoothingEnabled = false;
+            octx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw * zoom, ch * zoom);
+            wrap.appendChild(out);
+          } else {
+            wrap.appendChild(canvas);
+          }
+          status.textContent = "";
+          window.__pdfReady = true;
+        } catch (e) {
+          status.textContent = "ERR: " + e.message;
+          window.__pdfReady = "error:" + e.message;
+        }
+      })();
+    </script>
+  </body>
+</html>

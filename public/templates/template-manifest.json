@@ -1,0 +1,14 @@
+[
+  { "id": "datev-classic",   "name": "DATEV Classic",   "file": "datev-classic.html",   "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "datev-highcopy",  "name": "DATEV HighCopy",  "file": "datev-highcopy.html",  "supportsCumulative": false, "supportsAutoTax": false },
+  { "id": "lexware-classic", "name": "Lexware Classic", "file": "lexware-classic.html", "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "sage-classic",    "name": "Sage Classic",    "file": "sage-classic.html",    "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "viper-classic",   "name": "Viper Classic",   "file": "viper-classic.html",   "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "neon-classic",    "name": "Neon Classic",    "file": "neon-classic.html",    "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "atlas-classic",   "name": "Atlas Classic",   "file": "atlas-classic.html",   "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "aurora-classic",  "name": "Aurora Classic",  "file": "aurora-classic.html",  "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "ledger-classic",  "name": "Ledger Classic",  "file": "ledger-classic.html",  "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "slate-classic",   "name": "Slate Classic",   "file": "slate-classic.html",   "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "prism-classic",   "name": "Prism Classic",   "file": "prism-classic.html",   "supportsCumulative": true,  "supportsAutoTax": true },
+  { "id": "quartz-classic",  "name": "Quartz Classic",  "file": "quartz-classic.html",  "supportsCumulative": true,  "supportsAutoTax": true }
+]
