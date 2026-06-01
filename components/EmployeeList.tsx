@@ -24,7 +24,7 @@ export function EmployeeList({ employees }: { employees: Employee[] }) {
         {shown.map((e) => (
           <li key={e.id} className="flex items-center justify-between py-3">
             <Link
-              href={`/employees/${e.id}/edit`}
+              href={`/employees/${e.id}`}
               className="text-neutral-100 hover:underline"
             >
               {e.name || "(unnamed)"}
