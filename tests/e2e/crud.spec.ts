@@ -19,12 +19,13 @@ test("user can add a company and an employee, then search and delete", async ({
   await page.click("button:has-text('Add company')");
   await expect(page.getByText("ACME GmbH", { exact: true })).toBeVisible();
 
-  // add an employee
+  // add an employee via the wizard (skip company + months)
   await page.goto("/employees/new");
-  await page.selectOption("select[name='company_id']", { label: "ACME GmbH" });
   await page.fill("input[name='mitarbeiter.name']", "Max Mustermann");
-  await page.click("button:has-text('Save employee')");
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.click("button:has-text('Continue')");
+  await page.click("button:has-text('Save & finish')");
+  await expect(page).toHaveURL(/\/employees\/[0-9a-f-]+$/);
+  await page.goto("/dashboard");
   await expect(page.getByText("Max Mustermann")).toBeVisible();
 
   // search narrows the list

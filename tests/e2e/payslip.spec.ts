@@ -18,19 +18,15 @@ test("issue assigns a serial; reprint keeps it; next slip gets the next number",
   await page.click("button:has-text('Add company')");
   await expect(page.getByText("PayCo", { exact: true })).toBeVisible();
 
-  // employee (automatik on so the engine computes)
+  // employee (automatik on so the engine computes) via the wizard
   await page.goto("/employees/new");
-  await page.selectOption("select[name='company_id']", { label: "PayCo" });
   await page.fill("input[name='mitarbeiter.name']", "Erika Beispiel");
   await page.check("input[name='automatik.enabled']");
   await page.fill("input[name='automatik.steuerklasse']", "1");
   await page.fill("input[name='automatik.bundesland']", "BE");
   await page.fill("input[name='automatik.age']", "30");
-  await page.click("button:has-text('Save employee')");
-  await expect(page).toHaveURL(/\/dashboard$/);
-
-  // open employee detail
-  await page.click("text=Erika Beispiel");
+  await page.click("button:has-text('Continue')");
+  await page.click("button:has-text('Save & finish')");
   await expect(page.getByRole("heading", { name: "Erika Beispiel" })).toBeVisible();
 
   // month 1 (März)
