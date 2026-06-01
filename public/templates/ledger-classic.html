@@ -2880,8 +2880,42 @@
         renderJahreswerte();
       }
 
+      function autoVerdienst() {
+        if (!state.automatik || !state.automatik.enabled) return;
+        const t = computeTotals(state);
+        const steuer = state.steuer && state.steuer[0] ? state.steuer[0] : {};
+        const sv = state.sv && state.sv[0] ? state.sv[0] : {};
+        const v = state.verdienst || (state.verdienst = {});
+        v.gesamtBrutto = formatDE(t.gesamtBrutto);
+        v.steuerBrutto = formatDE(sumSteuerBrutto(state.brutto || []));
+        v.svBrutto = formatDE(sumSVBrutto(state.brutto || []));
+        v.lohnsteuer = steuer.lohnsteuer || "";
+        v.kirchensteuer = steuer.kirchensteuer || "";
+        v.soli = steuer.soli || "";
+        v.kvBeitrag = sv.kvBeitrag || "";
+        v.rvBeitrag = sv.rvBeitrag || "";
+        v.avBeitrag = sv.avBeitrag || "";
+        v.pvBeitrag = sv.pvBeitrag || "";
+        let stFrei = 0;
+        for (const r of state.brutto || []) {
+          if (/^F$/i.test(r.st || "")) stFrei += computeRowBetrag(r);
+        }
+        v.steuerfreieBezuege = stFrei > 0 ? formatDE(stFrei) : "";
+      }
+
       function renderJahreswerte() {
-        const y = computeYearTotals(state);
+        const c = state.cumulative;
+        const y = c
+          ? {
+              monatszahl: c.monatszahl,
+              gesamtBrutto: c.gesamtBrutto, steuerBrutto: c.steuerBrutto,
+              svBrutto: c.svBrutto, lohnsteuer: c.lohnsteuer,
+              kirchensteuer: c.kirchensteuer, soli: c.soli,
+              kvBeitrag: c.kvBeitrag, rvBeitrag: c.rvBeitrag,
+              avBeitrag: c.avBeitrag, pvBeitrag: c.pvBeitrag,
+              auszahlung: c.auszahlung,
+            }
+          : computeYearTotals(state);
         const label = y.monatszahl > 0
           ? " (" + y.monatszahl + " " + (y.monatszahl === 1 ? "Monat" : "Monate") + " seit Eintritt)"
           : "";
@@ -2914,6 +2948,7 @@
         renderEmployerAndAddress();
         renderBrutto();
         renderSteuerUndSV();
+        autoVerdienst();
         renderVerdienst();
         renderFooter();
       }
