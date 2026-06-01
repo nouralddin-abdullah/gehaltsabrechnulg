@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { BruttoRow } from "@/lib/slip-state";
+import type { Payslip } from "@/lib/db/types";
 import { GERMAN_MONTHS } from "@/lib/payslip-data";
 import { createMonth } from "@/app/(app)/employees/[id]/payslips/actions";
 
@@ -14,12 +15,17 @@ export function MonthForm({
   employeeId,
   templateId,
   action,
+  payslip,
 }: {
   employeeId: string;
   templateId: string;
   action?: (formData: FormData) => void;
+  payslip?: Payslip; // when present, the form is pre-filled for editing
 }) {
-  const [rows, setRows] = useState<BruttoRow[]>([{ ...EMPTY_ROW }]);
+  const seedRows = payslip?.data.brutto?.length
+    ? payslip.data.brutto.map((r) => ({ ...EMPTY_ROW, ...r }))
+    : [{ ...EMPTY_ROW }];
+  const [rows, setRows] = useState<BruttoRow[]>(seedRows);
 
   const update = (i: number, key: keyof BruttoRow, value: string) =>
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
@@ -35,7 +41,12 @@ export function MonthForm({
           Abrechnungszeitraum
         </legend>
         <div className="flex gap-3">
-          <select name="monat" defaultValue="" className="cmp-input flex-1" required>
+          <select
+            name="monat"
+            defaultValue={payslip?.data.zeitraum.monat ?? ""}
+            className="cmp-input flex-1"
+            required
+          >
             <option value="" disabled>
               Monat …
             </option>
@@ -45,11 +56,11 @@ export function MonthForm({
               </option>
             ))}
           </select>
-          <input name="jahr" placeholder="Jahr" defaultValue="2026" className="cmp-input w-28" required />
+          <input name="jahr" placeholder="Jahr" defaultValue={payslip?.data.zeitraum.jahr ?? "2026"} className="cmp-input w-28" required />
         </div>
         <div className="flex gap-3">
-          <input name="druckdatum" placeholder="Druckdatum (TT.MM.JJJJ)" className="cmp-input flex-1" />
-          <input name="blatt" placeholder="Blatt" defaultValue="1" className="cmp-input w-20" />
+          <input name="druckdatum" placeholder="Druckdatum (TT.MM.JJJJ)" defaultValue={payslip?.data.meta?.druckdatum ?? ""} className="cmp-input flex-1" />
+          <input name="blatt" placeholder="Blatt" defaultValue={payslip?.data.meta?.blatt ?? "1"} className="cmp-input w-20" />
         </div>
       </fieldset>
 

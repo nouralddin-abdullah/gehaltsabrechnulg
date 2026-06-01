@@ -8,6 +8,7 @@ import {
   issuePayslip as issuePayslipDb,
   savePayslipComputedTotals,
   setPayslipTemplate,
+  updatePayslipData,
 } from "@/lib/db/payslips";
 import type { ComputedTotals } from "@/lib/db/types";
 
@@ -49,6 +50,18 @@ export async function changeTemplate(
 ): Promise<void> {
   await setPayslipTemplate(payslipId, templateId);
   revalidatePath(`/employees/${employeeId}/payslips/${payslipId}`);
+}
+
+// Edit an existing month's inputs, then return to its preview (status/serial kept).
+export async function updateMonth(
+  employeeId: string,
+  payslipId: string,
+  formData: FormData,
+): Promise<void> {
+  await updatePayslipData(payslipId, buildPayslipData(formData));
+  revalidatePath(`/employees/${employeeId}/payslips/${payslipId}`);
+  revalidatePath(`/employees/${employeeId}`);
+  redirect(`/employees/${employeeId}/payslips/${payslipId}`);
 }
 
 // Like createMonth, but returns to the employee detail page (used by the wizard).

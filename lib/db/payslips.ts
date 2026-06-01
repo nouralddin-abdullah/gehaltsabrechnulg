@@ -67,6 +67,21 @@ export async function setPayslipTemplate(
   if (error) throw error;
 }
 
+// Update a month's inputs (keeps status/serial). Re-derives year/month.
+export async function updatePayslipData(
+  id: string,
+  data: PayslipData,
+): Promise<void> {
+  const supabase = await createClient();
+  const year = Number(data.zeitraum.jahr) || 0;
+  const month = monthNumber(data.zeitraum.monat);
+  const { error } = await supabase
+    .from("payslips")
+    .update({ data, year, month, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function savePayslipComputedTotals(
   id: string,
   computed_totals: ComputedTotals,

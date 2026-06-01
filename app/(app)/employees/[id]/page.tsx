@@ -47,9 +47,17 @@ export default async function EmployeeDetailPage({
             >
               {p.data.zeitraum.monat} {p.data.zeitraum.jahr}
             </Link>
-            <span className="text-xs text-zinc-500">
-              {p.status === "issued" ? `#${p.serial_number}` : "draft"}
-            </span>
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-zinc-500">
+                {p.status === "issued" ? `#${p.serial_number}` : "draft"}
+              </span>
+              <Link
+                href={`/employees/${id}/payslips/${p.id}/edit`}
+                className="text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Edit
+              </Link>
+            </div>
           </li>
         ))}
       </ul>

@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 import { getEmployee } from "@/lib/db/employees";
 import { listCompanies } from "@/lib/db/companies";
 import { getPayslip, getYearComputedTotals } from "@/lib/db/payslips";
+import Link from "next/link";
 import { SlipPreview } from "@/components/SlipPreview";
 import { TEMPLATES } from "@/lib/template-manifest";
 import { Breadcrumbs } from "@/components/app-shell/Breadcrumbs";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function PayslipPreviewPage({
   params,
@@ -36,6 +38,14 @@ export default async function PayslipPreviewPage({
           { label: `${payslip.data.zeitraum.monat} ${payslip.data.zeitraum.jahr}` },
         ]}
       />
+      <PageHeader title={`${payslip.data.zeitraum.monat} ${payslip.data.zeitraum.jahr}`}>
+        <Link
+          href={`/employees/${id}/payslips/${payslipId}/edit`}
+          className="text-sm text-zinc-400 hover:text-zinc-200"
+        >
+          Edit month
+        </Link>
+      </PageHeader>
       <SlipPreview
         company={company}
         employee={employee}
