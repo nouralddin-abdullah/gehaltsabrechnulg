@@ -2,30 +2,76 @@
 
 import { useEffect, useRef } from "react";
 import type { SlipState } from "@/lib/slip-state";
+import type { ComputedTotals } from "@/lib/db/types";
+
+// Reads the template's own computed figures from the same-origin iframe window.
+// The template owns all math; we only copy what it produced.
+function captureComputed(win: Window): ComputedTotals | null {
+  const w = win as unknown as {
+    state?: SlipState;
+    computeTotals?: (s: unknown) => { gesamtBrutto: number; auszahlungsbetrag: number };
+    sumSteuerBrutto?: (b: unknown) => number;
+    sumSVBrutto?: (b: unknown) => number;
+    parseDE?: (s: string | undefined) => number | null;
+  };
+  if (!w.state || !w.computeTotals || !w.sumSteuerBrutto || !w.sumSVBrutto || !w.parseDE) {
+    return null;
+  }
+  const s = w.state;
+  const t = w.computeTotals(s);
+  const st = (s.steuer && s.steuer[0]) || {};
+  const sv = (s.sv && s.sv[0]) || {};
+  const num = (v: string | undefined) => w.parseDE!(v) || 0;
+  return {
+    gesamtBrutto: t.gesamtBrutto,
+    steuerBrutto: w.sumSteuerBrutto(s.brutto || []),
+    svBrutto: w.sumSVBrutto(s.brutto || []),
+    lohnsteuer: num(st.lohnsteuer),
+    kirchensteuer: num(st.kirchensteuer),
+    soli: num(st.soli),
+    kvBeitrag: num(sv.kvBeitrag),
+    rvBeitrag: num(sv.rvBeitrag),
+    avBeitrag: num(sv.avBeitrag),
+    pvBeitrag: num(sv.pvBeitrag),
+    auszahlung: t.auszahlungsbetrag,
+  };
+}
 
 export function SlipFrame({
   templateFile,
   state,
+  onComputed,
 }: {
   templateFile: string;
   state: SlipState;
+  onComputed?: (totals: ComputedTotals) => void;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
 
-  // Post the state whenever the frame is (re)loaded or the state changes.
   useEffect(() => {
     const iframe = ref.current;
     if (!iframe) return;
 
     const post = () => {
-      iframe.contentWindow?.postMessage({ type: "setState", state }, "*");
+      const win = iframe.contentWindow;
+      if (!win) return;
+      win.postMessage({ type: "setState", state }, "*");
+      if (onComputed) {
+        // let the template handle the message + render, then read it back
+        setTimeout(() => {
+          try {
+            const totals = captureComputed(win);
+            if (totals) onComputed(totals);
+          } catch {
+            /* cross-origin or not-ready: ignore */
+          }
+        }, 120);
+      }
     };
     iframe.addEventListener("load", post);
-    // If it already loaded before this effect ran, post immediately.
     if (iframe.contentWindow) post();
-
     return () => iframe.removeEventListener("load", post);
-  }, [state, templateFile]);
+  }, [state, templateFile, onComputed]);
 
   const print = () => ref.current?.contentWindow?.print();
 
