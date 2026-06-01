@@ -11,6 +11,7 @@ export async function createCompany(formData: FormData): Promise<void> {
     name: String(formData.get("name") ?? "").trim(),
     firma: String(formData.get("firma") ?? ""),
     mandant: String(formData.get("mandant") ?? ""),
+    mandant_box: String(formData.get("mandant_box") ?? ""),
     roc_code: String(formData.get("roc_code") ?? ""),
     default_template: String(
       formData.get("default_template") ?? "datev-classic",

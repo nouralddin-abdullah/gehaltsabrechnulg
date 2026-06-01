@@ -15,6 +15,7 @@ export async function createCompany(input: {
   name: string;
   firma: string;
   mandant: string;
+  mandant_box: string;
   roc_code: string;
   default_template: string;
 }): Promise<Company> {
