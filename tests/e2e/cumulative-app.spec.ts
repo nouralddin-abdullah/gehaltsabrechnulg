@@ -20,10 +20,9 @@ test("cumulative across 3 saved months shows the true sum on the slip", async ({
   // employee with Automatik on (full engine runs per month)
   await page.goto("/employees/new");
   await page.fill("input[name='mitarbeiter.name']", "Cumul Tester");
+  await page.fill("input[name='meta.stKl']", "1");
   await page.check("input[name='automatik.enabled']");
-  await page.fill("input[name='automatik.steuerklasse']", "1");
   await page.fill("input[name='automatik.bundesland']", "BE");
-  await page.fill("input[name='automatik.age']", "30");
   await page.click("button:has-text('Continue')");
   await page.click("button:has-text('Save & finish')");
   await expect(page).toHaveURL(/\/employees\/[0-9a-f-]+$/);

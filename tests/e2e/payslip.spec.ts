@@ -21,10 +21,9 @@ test("issue assigns a serial; reprint keeps it; next slip gets the next number",
   // employee (automatik on so the engine computes) via the wizard
   await page.goto("/employees/new");
   await page.fill("input[name='mitarbeiter.name']", "Erika Beispiel");
+  await page.fill("input[name='meta.stKl']", "1");
   await page.check("input[name='automatik.enabled']");
-  await page.fill("input[name='automatik.steuerklasse']", "1");
   await page.fill("input[name='automatik.bundesland']", "BE");
-  await page.fill("input[name='automatik.age']", "30");
   await page.click("button:has-text('Continue')");
   await page.click("button:has-text('Save & finish')");
   await expect(page.getByRole("heading", { name: "Erika Beispiel" })).toBeVisible();
