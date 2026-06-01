@@ -13,19 +13,21 @@ const EMPTY_ROW: BruttoRow = {
 export function MonthForm({
   employeeId,
   templateId,
+  action,
 }: {
   employeeId: string;
   templateId: string;
+  action?: (formData: FormData) => void;
 }) {
   const [rows, setRows] = useState<BruttoRow[]>([{ ...EMPTY_ROW }]);
 
   const update = (i: number, key: keyof BruttoRow, value: string) =>
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
 
-  const action = createMonth.bind(null, employeeId, templateId);
+  const boundAction = action ?? createMonth.bind(null, employeeId, templateId);
 
   return (
-    <form action={action} className="flex flex-col gap-6">
+    <form action={boundAction} className="flex flex-col gap-6">
       <input type="hidden" name="brutto_json" value={JSON.stringify(rows)} />
 
       <fieldset className="flex flex-col gap-3">

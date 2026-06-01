@@ -50,3 +50,18 @@ export async function changeTemplate(
   await setPayslipTemplate(payslipId, templateId);
   revalidatePath(`/employees/${employeeId}/payslips/${payslipId}`);
 }
+
+// Like createMonth, but returns to the employee detail page (used by the wizard).
+export async function createMonthThenDetail(
+  employeeId: string,
+  templateId: string,
+  formData: FormData,
+): Promise<void> {
+  await createPayslip({
+    employee_id: employeeId,
+    template_id: templateId,
+    data: buildPayslipData(formData),
+  });
+  revalidatePath(`/employees/${employeeId}`);
+  redirect(`/employees/${employeeId}`);
+}
