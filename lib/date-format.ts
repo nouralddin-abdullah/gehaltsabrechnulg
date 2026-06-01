@@ -30,3 +30,20 @@ export function fromDateInput(iso: string, fmt: DateFmt): string {
   if (fmt === "ddmmyy") return `${pad(dd)}${pad(mm)}${yyyy.slice(2)}`;
   return `${pad(dd)}.${pad(mm)}.${yyyy}`;
 }
+
+// Whole-years age from a "ddmmyy" date of birth, as of a reference year/month
+// (the payslip period). Returns 0 for an unparseable/empty DOB.
+export function ageFromDob(
+  dobDdmmyy: string,
+  refYear: number,
+  refMonth: number,
+): number {
+  const m = /^(\d{2})(\d{2})(\d{2})$/.exec((dobDdmmyy || "").trim());
+  if (!m || !refYear) return 0;
+  const birthMonth = +m[2];
+  const yy = +m[3];
+  const birthYear = yy < 70 ? 2000 + yy : 1900 + yy;
+  let age = refYear - birthYear;
+  if (refMonth && refMonth < birthMonth) age -= 1; // birthday not reached yet
+  return age > 0 ? age : 0;
+}

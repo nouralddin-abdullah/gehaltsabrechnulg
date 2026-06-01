@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toDateInput, fromDateInput } from "@/lib/date-format";
+import { toDateInput, fromDateInput, ageFromDob } from "@/lib/date-format";
 
 describe("ddmmyy <-> ISO", () => {
   it("stored ddmmyy to date-input ISO", () => {
@@ -21,5 +21,19 @@ describe("TT.MM.JJJJ <-> ISO", () => {
   });
   it("passes through unparseable values unchanged on read", () => {
     expect(toDateInput("garbage", "ddmmyy")).toBe("");
+  });
+});
+
+describe("ageFromDob", () => {
+  it("computes whole-years age as of the payslip period", () => {
+    // born 02.10.1997
+    expect(ageFromDob("021097", 2026, 3)).toBe(28); // March 2026: birthday not reached
+    expect(ageFromDob("021097", 2026, 11)).toBe(29); // November 2026: birthday passed
+    // born 25.07.1989
+    expect(ageFromDob("250789", 2026, 3)).toBe(36);
+  });
+  it("returns 0 for empty/unparseable DOB", () => {
+    expect(ageFromDob("", 2026, 3)).toBe(0);
+    expect(ageFromDob("garbage", 2026, 3)).toBe(0);
   });
 });

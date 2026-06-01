@@ -2,6 +2,7 @@ import type { Company, Employee, Payslip } from "@/lib/db/types";
 import type {
   SlipState, SlipMeta, BankBlock, VerdienstBlock, CumulativeTotals,
 } from "@/lib/slip-state";
+import { ageFromDob } from "@/lib/date-format";
 
 const EMPTY_META: SlipMeta = {
   persNr: "", geburtsdatum: "", stKl: "", faktor: "",
@@ -71,7 +72,15 @@ export function assembleState(
     nettoBezuege: d.nettoBezuege ?? [],
     bank,
     hinweiseZurAbrechnung: "",
-    automatik: employee.data.automatik,
+    // Engine inputs are derived from the single employee fields (no duplicates):
+    // Steuerklasse + Konfession come from the Kopfdaten, Age from the Geburtsdatum.
+    automatik: {
+      ...employee.data.automatik,
+      steuerklasse:
+        Number(empMeta.stKl) || employee.data.automatik.steuerklasse || 1,
+      age: ageFromDob(empMeta.geburtsdatum ?? "", payslip.year, payslip.month),
+      konfession: empMeta.konfession ?? "",
+    },
   };
   if (opts.cumulative) state.cumulative = opts.cumulative;
   return state;

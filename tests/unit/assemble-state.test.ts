@@ -78,4 +78,19 @@ describe("assembleState", () => {
     expect(s.firma).toBe("");
     expect(s.meta.mandant).toBe("");
   });
+
+  it("derives engine automatik inputs from the single employee fields", () => {
+    const emp: Employee = {
+      ...employee,
+      data: {
+        ...employee.data,
+        meta: { ...employee.data.meta, stKl: "3", geburtsdatum: "021097", konfession: "rk" },
+      },
+    };
+    const s = assembleState(company, emp, payslip); // payslip = März 2026
+    expect(s.meta.stKl).toBe("3"); // printed on the slip
+    expect(s.automatik.steuerklasse).toBe(3); // drives the tax calc
+    expect(s.automatik.age).toBe(28); // born Oct 1997, as of March 2026
+    expect(s.automatik.konfession).toBe("rk"); // wired to church-tax calc
+  });
 });
