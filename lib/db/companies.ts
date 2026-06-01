@@ -37,3 +37,30 @@ export async function deleteCompany(id: string): Promise<void> {
   const { error } = await supabase.from("companies").delete().eq("id", id);
   if (error) throw error;
 }
+
+export async function getCompany(id: string): Promise<Company | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Company | null;
+}
+
+export async function updateCompany(
+  id: string,
+  input: {
+    name: string;
+    firma: string;
+    mandant: string;
+    mandant_box: string;
+    roc_code: string;
+    default_template: string;
+  },
+): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("companies").update(input).eq("id", id);
+  if (error) throw error;
+}
