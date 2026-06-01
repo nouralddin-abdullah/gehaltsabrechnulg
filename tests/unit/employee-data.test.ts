@@ -1,0 +1,44 @@
+import { describe, it, expect } from "vitest";
+import { buildEmployeeData, filterEmployees } from "@/lib/employee-data";
+import type { Employee } from "@/lib/db/types";
+
+function form(entries: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(entries)) fd.set(k, v);
+  return fd;
+}
+
+describe("buildEmployeeData", () => {
+  it("nests dotted field names and coerces checkbox + number fields", () => {
+    const data = buildEmployeeData(
+      form({
+        "mitarbeiter.name": "Max",
+        "meta.persNr": "1001",
+        "automatik.enabled": "on",
+        "automatik.steuerklasse": "1",
+        "automatik.kinder": "2",
+        "automatik.age": "30",
+      }),
+    );
+    expect(data.mitarbeiter.name).toBe("Max");
+    expect(data.meta.persNr).toBe("1001");
+    expect(data.automatik.enabled).toBe(true);
+    expect(data.automatik.steuerklasse).toBe(1);
+    expect(data.automatik.kinder).toBe(2);
+    expect(data.automatik.midijob).toBe(false); // unchecked checkbox absent
+  });
+});
+
+describe("filterEmployees", () => {
+  const list = [
+    { id: "1", name: "Max Mustermann" },
+    { id: "2", name: "Erika Beispiel" },
+  ] as Employee[];
+
+  it("returns all when query is empty", () => {
+    expect(filterEmployees(list, "")).toHaveLength(2);
+  });
+  it("matches case-insensitively by name", () => {
+    expect(filterEmployees(list, "erika").map((e) => e.id)).toEqual(["2"]);
+  });
+});
