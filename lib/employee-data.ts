@@ -1,4 +1,6 @@
 import type { Employee, EmployeeData } from "@/lib/db/types";
+import { EMPLOYEE_DATE_PATHS } from "@/lib/employee-fields";
+import { fromDateInput } from "@/lib/date-format";
 
 const CHECKBOX_PATHS = new Set(["automatik.enabled", "automatik.midijob"]);
 const NUMBER_PATHS = new Set([
@@ -34,6 +36,8 @@ export function buildEmployeeData(formData: FormData): EmployeeData {
       setNested(data, group, key, value === "on" || value === "true");
     } else if (NUMBER_PATHS.has(path)) {
       setNested(data, group, key, Number(value) || 0);
+    } else if (EMPLOYEE_DATE_PATHS[path]) {
+      setNested(data, group, key, fromDateInput(value, EMPLOYEE_DATE_PATHS[path]));
     } else {
       setNested(data, group, key, value);
     }

@@ -29,6 +29,26 @@ describe("buildEmployeeData", () => {
   });
 });
 
+describe("buildEmployeeData date conversion", () => {
+  it("converts ISO date inputs to the stored ddmmyy format", () => {
+    const data = buildEmployeeData(
+      form({
+        "mitarbeiter.name": "Max",
+        "meta.geburtsdatum": "1989-07-25",
+        "meta.eintritt": "2026-03-02",
+      }),
+    );
+    expect(data.meta.geburtsdatum).toBe("250789");
+    expect(data.meta.eintritt).toBe("020326");
+  });
+
+  it("leaves non-date meta fields untouched", () => {
+    expect(
+      buildEmployeeData(form({ "meta.steuerId": "69814453022" })).meta.steuerId,
+    ).toBe("69814453022");
+  });
+});
+
 describe("filterEmployees", () => {
   const list = [
     { id: "1", name: "Max Mustermann" },
