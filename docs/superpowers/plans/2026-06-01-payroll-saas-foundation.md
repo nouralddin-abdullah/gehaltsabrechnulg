@@ -6,7 +6,7 @@
 
 **Architecture:** A fresh Next.js (App Router, TypeScript) shell coexists with the existing repo files. The 12 templates become static assets under `public/templates` and are reused untouched — each is an iframe render+calc engine driven by one `postMessage({type:"setState", state})`. A `SlipFrame` client component loads a template, posts a `SlipState`, and prints it. This plan ships a `/demo` page that renders a real slip from a fixture and verifies the embedded calculation engine still runs.
 
-**Tech Stack:** Next.js 15 (App Router) · React 19 · TypeScript 5 · Tailwind CSS 3 · Vitest (unit) · Playwright (E2E).
+**Tech Stack:** Next.js 15 (App Router) · React 19 · TypeScript 5 · Tailwind CSS 4 · Vitest (unit) · Playwright (E2E).
 
 **Spec:** `docs/superpowers/specs/2026-06-01-payroll-saas-design.md`
 
@@ -18,9 +18,9 @@
 package.json                              # scripts + deps
 tsconfig.json                             # TS config (App Router)
 next.config.mjs                           # Next config
-postcss.config.mjs                        # Tailwind/Autoprefixer
-tailwind.config.ts                        # content globs
-vitest.config.ts                          # unit test config (node env)
+postcss.config.mjs                        # Tailwind v4 PostCSS plugin (@tailwindcss/postcss)
+.eslintrc.json                            # next/core-web-vitals (so next build lints)
+vitest.config.ts                          # unit test config (node env, @/ alias)
 playwright.config.ts                      # E2E config (boots dev server)
 app/layout.tsx                            # root layout, imports globals.css
 app/globals.css                           # tailwind directives + dark base
@@ -71,10 +71,15 @@ Run:
 ```bash
 npm install next@15 react@19 react-dom@19
 npm install -D typescript@5 @types/node @types/react @types/react-dom \
-  tailwindcss@3 postcss autoprefixer \
+  tailwindcss@4 @tailwindcss/postcss postcss \
   vitest@2 \
   @playwright/test eslint eslint-config-next@15
 npx playwright install chromium
+```
+
+Also add `.eslintrc.json` so `next build` lints without prompting:
+```json
+{ "extends": "next/core-web-vitals" }
 ```
 Expected: dependencies install; `node_modules` populated; no fatal errors.
 
@@ -101,7 +106,7 @@ Expected: dependencies install; `node_modules` populated; no fatal errors.
     "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "templates", "public/templates", "scripts"]
+  "exclude": ["node_modules"]
 }
 ```
 
@@ -112,32 +117,20 @@ const nextConfig = {};
 export default nextConfig;
 ```
 
-`postcss.config.mjs`:
+`postcss.config.mjs` (Tailwind v4 uses the dedicated PostCSS plugin):
 ```javascript
 export default {
-  plugins: { tailwindcss: {}, autoprefixer: {} },
+  plugins: { "@tailwindcss/postcss": {} },
 };
 ```
 
-`tailwind.config.ts`:
-```typescript
-import type { Config } from "tailwindcss";
-
-const config: Config = {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
-  theme: { extend: {} },
-  plugins: [],
-};
-export default config;
-```
+Tailwind v4 needs **no `tailwind.config.ts`** — content sources are auto-detected and theme config is CSS-first (`@theme` in CSS when needed).
 
 - [ ] **Step 4: Create the app shell**
 
-`app/globals.css`:
+`app/globals.css` (Tailwind v4 single import replaces the three `@tailwind` directives):
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   color-scheme: dark;
@@ -193,11 +186,15 @@ export default function Home() {
 
 - [ ] **Step 5: Create test-runner configs**
 
-`vitest.config.ts`:
+`vitest.config.ts` (the `@/` alias lets unit tests import `@/lib/...`):
 ```typescript
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./", import.meta.url)) },
+  },
   test: {
     environment: "node",
     include: ["tests/unit/**/*.test.ts"],
