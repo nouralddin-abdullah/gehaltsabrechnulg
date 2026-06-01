@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SlipFrame } from "@/components/SlipFrame";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { assembleState } from "@/lib/assembleState";
 import { sumComputedTotals } from "@/lib/cumulative";
 import type { Company, Employee, Payslip, ComputedTotals } from "@/lib/db/types";
@@ -69,12 +71,12 @@ export function SlipPreview({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm text-neutral-300">
+        <label className="text-sm text-zinc-300">
           Template{" "}
-          <select
+          <Select
             value={templateId}
             onChange={(e) => onTemplateChange(e.target.value)}
-            className="cmp-input"
+            className="inline-block w-auto"
           >
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
@@ -82,20 +84,15 @@ export function SlipPreview({
                 {t.supportsCumulative ? "" : " (single month)"}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         {payslip.serial_number != null ? (
-          <span className="text-sm text-neutral-300">
+          <span className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300">
             Serial #{payslip.serial_number}
           </span>
         ) : (
-          <button
-            onClick={onIssue}
-            className="rounded bg-emerald-500 px-3 py-1.5 text-sm font-medium text-neutral-950"
-          >
-            Issue &amp; assign serial
-          </button>
+          <Button onClick={onIssue}>Issue &amp; assign serial</Button>
         )}
       </div>
 
