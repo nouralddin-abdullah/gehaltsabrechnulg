@@ -4,36 +4,33 @@ import { useEffect, useRef } from "react";
 import type { SlipState } from "@/lib/slip-state";
 import type { ComputedTotals } from "@/lib/db/types";
 
-// Reads the template's own computed figures from the same-origin iframe window.
-// The template owns all math; we only copy what it produced.
+// Parse a German-formatted number string ("2.855,29") to a number.
+function parseDE(s: string | null | undefined): number {
+  if (!s) return 0;
+  const n = Number(String(s).replace(/\./g, "").replace(",", ".").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Reads the template's own computed figures back out of the rendered (same-origin)
+// iframe DOM. The template owns all math; we only copy the cells it produced. We
+// read the DOM rather than the template's JS `state` because that variable is a
+// module-local `const`, not exposed on the iframe window.
 function captureComputed(win: Window): ComputedTotals | null {
-  const w = win as unknown as {
-    state?: SlipState;
-    computeTotals?: (s: unknown) => { gesamtBrutto: number; auszahlungsbetrag: number };
-    sumSteuerBrutto?: (b: unknown) => number;
-    sumSVBrutto?: (b: unknown) => number;
-    parseDE?: (s: string | undefined) => number | null;
-  };
-  if (!w.state || !w.computeTotals || !w.sumSteuerBrutto || !w.sumSVBrutto || !w.parseDE) {
-    return null;
-  }
-  const s = w.state;
-  const t = w.computeTotals(s);
-  const st = (s.steuer && s.steuer[0]) || {};
-  const sv = (s.sv && s.sv[0]) || {};
-  const num = (v: string | undefined) => w.parseDE!(v) || 0;
+  const doc = win.document;
+  if (!doc.getElementById("gesamtBruttoCell")) return null; // not rendered yet
+  const cell = (id: string) => parseDE(doc.getElementById(id)?.textContent);
   return {
-    gesamtBrutto: t.gesamtBrutto,
-    steuerBrutto: w.sumSteuerBrutto(s.brutto || []),
-    svBrutto: w.sumSVBrutto(s.brutto || []),
-    lohnsteuer: num(st.lohnsteuer),
-    kirchensteuer: num(st.kirchensteuer),
-    soli: num(st.soli),
-    kvBeitrag: num(sv.kvBeitrag),
-    rvBeitrag: num(sv.rvBeitrag),
-    avBeitrag: num(sv.avBeitrag),
-    pvBeitrag: num(sv.pvBeitrag),
-    auszahlung: t.auszahlungsbetrag,
+    gesamtBrutto: cell("gesamtBruttoCell"),
+    steuerBrutto: cell("vSteuerBrutto"),
+    svBrutto: cell("vSvBrutto"),
+    lohnsteuer: cell("vLohnsteuer"),
+    kirchensteuer: cell("vKirchensteuer"),
+    soli: cell("vSoli"),
+    kvBeitrag: cell("vKvBeitrag"),
+    rvBeitrag: cell("vRvBeitrag"),
+    avBeitrag: cell("vAvBeitrag"),
+    pvBeitrag: cell("vPvBeitrag"),
+    auszahlung: cell("fAuszahlung"),
   };
 }
 
