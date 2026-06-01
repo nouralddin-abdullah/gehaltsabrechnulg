@@ -5,8 +5,8 @@
 }
 html,
 body {
-  background: #0b0d10;
-  color: #e7e9ec;
+  background: #09090b; /* zinc-950 */
+  color: #e4e4e7; /* zinc-200 */
 }
 
 .cmp-input {
