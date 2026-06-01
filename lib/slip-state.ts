@@ -19,6 +19,9 @@ export interface BruttoRow {
   lohnart: string; bezeichnung: string; einheit: string;
   menge: string; faktor: string; prozent: string;
   st: string; sv: string; gb: string;
+  // A "hinweis" row renders as a full-width note line (no numbers), e.g.
+  // "Nachberechnung 09/2023: …". Normal rows leave these undefined.
+  hinweis?: boolean; text?: string;
 }
 
 export interface SteuerRow {

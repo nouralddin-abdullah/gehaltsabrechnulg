@@ -52,6 +52,9 @@ export function assembleState(
   // Pers-Nr is one value shown in two places.
   meta.persNr = empMeta.persNr ?? "";
   meta.persNrBox = empMeta.persNr ?? "";
+  // Tax/SV days default to a full month (30) when not set.
+  if (!meta.stTg) meta.stTg = "30";
+  if (!meta.umSvTg) meta.umSvTg = "30";
 
   const serial = opts.serial ?? null;
   const bank: BankBlock = {

@@ -35,6 +35,8 @@ export const EMPLOYEE_FIELD_GROUPS: EmployeeFieldGroup[] = [
       { path: "meta.austritt", label: "Austritt", description: "Employment end date (blank if ongoing).", example: "02.04.2026", date: "ddmmyy" },
       { path: "meta.steuerId", label: "Steuer-ID", description: "Tax identification number (IdNr).", example: "69814453022" },
       { path: "meta.abtNr", label: "Abt.-Nr.", description: "Department number.", example: "1" },
+      { path: "meta.stTg", label: "St.-Tg", description: "Tax days in the period (usually 30 for a full month). Printed on the slip; defaults to 30.", example: "30" },
+      { path: "meta.umSvTg", label: "Um.-SV-Tg", description: "Social-insurance days in the period (usually 30). Printed on the slip; defaults to 30.", example: "30" },
     ],
   },
   {
