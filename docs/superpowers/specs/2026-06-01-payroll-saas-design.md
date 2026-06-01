@@ -15,7 +15,7 @@ The hard, already-solved part — the slip layout and the full German calculatio
 
 - **No billing/payment.** Structurally a SaaS, but no Stripe/subscription/paywall yet.
 - **No teams / shared accounts.** One user = one tenant. A user's data is private to them.
-- **No new or changed tax math.** The existing automatic engine inside the templates (Lohnsteuer/PAP, Soli, SV from rates, Midijob, Gesamt-Brutto, Netto-Verdienst, Auszahlungsbetrag, Menge×Faktor) is preserved as-is. We do not rebuild, duplicate, or re-derive any of it.
+- **No new or changed tax math.** The existing automatic calculation engine inside the templates (Lohnsteuer/PAP, Soli, SV from rates, Midijob, Gesamt-Brutto, Netto-Verdienst, Auszahlungsbetrag, Menge×Faktor) is preserved as-is. We do not rebuild, duplicate, or re-derive any of it. (The only template edit anywhere is a minimal, backward-compatible tweak to the *cumulative display* block so it can show true sums — see "Cumulative totals" — which touches no calculation logic.)
 - **No multi-page slips** beyond what templates already do.
 - **No email verification gate** in v1 (users can log in immediately). Password reset is included.
 - **No offline mode.** Becoming a SaaS trades away the original "double-click a file, works offline" nature.
@@ -31,7 +31,7 @@ The hard, already-solved part — the slip layout and the full German calculatio
 ## Architecture
 
 - **Frontend shell:** Next.js (App Router) + React + TypeScript + Tailwind. Rebuilt fresh (auth screens, dashboard, wizard, company manager, slip view). The old `index.html` form is a *reference* for the field set, not reused verbatim.
-- **Templates:** moved to `public/templates/*.html`, served as static assets, reused **unchanged**. Rendered through a `SlipFrame` React component (iframe + `postMessage`).
+- **Templates:** moved to `public/templates/*.html`, served as static assets, reused **as-is** — the calculation engine is untouched; the only edit anywhere is one minimal, backward-compatible tweak to the cumulative-display block (see "Cumulative totals"). Rendered through a `SlipFrame` React component (iframe + `postMessage`).
 - **Backend:** Supabase — Postgres database, Supabase Auth (email + password), Row-Level Security (RLS) for per-user isolation, and a Postgres function for atomic serial allocation.
 - **Hosting:** Vercel (Next.js) + Supabase cloud.
 
@@ -54,8 +54,9 @@ All domain tables carry `owner_id` and are protected by RLS (`owner_id = auth.ui
 - **profiles** — `id` (= `auth.users.id`), `username`, `email`, `created_at`. One per account; created by a trigger on `auth.users` insert.
 - **companies** — `id`, `owner_id`, `name`, employer line(s) (the `firma` free-text used on the slip), employer codes (e.g. Mandant, R0C), `default_template`, `created_at`. *This is the per-user company dropdown list.*
 - **employees** — `id`, `owner_id`, `company_id` (→ companies), and the person-stable fields: name, address (Straße/PLZ/Ort), Personalnummer, Geburtsdatum, Steuerklasse, Faktor, Konfession, Freibeträge, SV-Nummer, Krankenkasse, KK%, PGRS/BGRS, Eintritt/Austritt, Steuer-ID, MFB, Abt.-Nr., etc. `created_at`.
-- **payslips** — `id`, `owner_id`, `employee_id` (→ employees), `year`, `month`, `status` (`draft` | `issued`), `serial_number` (NULL until issued), `issued_at` (NULL until issued), `template_id`, **`data` JSONB**, `created_at`, `updated_at`. **Unique (`employee_id`, `year`, `month`).**
-  - `data` JSONB holds the month's *variable inputs only*: Abrechnungszeitraum, Brutto-Bezüge rows, Steuer rows (L/N), SV rows (L/N) with their bases/rates, Verdienstbescheinigung (YTD) fields, Netto-Bezüge/Abzüge rows, Bank/Auszahlung inputs, Druckdatum, Blatt, plus any per-month overrides of normally-stable fields.
+- **payslips** — `id`, `owner_id`, `employee_id` (→ employees), `year`, `month`, `status` (`draft` | `issued`), `serial_number` (NULL until issued), `issued_at` (NULL until issued), `template_id`, **`data` JSONB**, **`computed_totals` JSONB**, `created_at`, `updated_at`. **Unique (`employee_id`, `year`, `month`).**
+  - `data` JSONB holds the month's *variable inputs only*: Abrechnungszeitraum, Brutto-Bezüge rows, Steuer rows (L/N), SV rows (L/N) with their bases/rates, Netto-Bezüge/Abzüge rows, Bank/Auszahlung inputs, Druckdatum, Blatt, plus any per-month overrides of normally-stable fields.
+  - `computed_totals` JSONB is a small **snapshot of the template-computed figures for that month** (Gesamt-Brutto, Steuer-Brutto, Lohnsteuer, Kirchensteuer, Soli, SV-Brutto, KV/RV/AV/PV-Beitrag, Auszahlungsbetrag). It is captured by reading the rendered slip back from the template iframe — **the template does the math, we only store its output**. Used to build true cumulative totals (see "Cumulative totals") without re-deriving any math in the shell.
 - **serial_counter** — a single row holding the current global value. Allocated via `allocate_serial()`. Seeded to a realistic starting value (≈ 80,000) so early slips don't read as "#1".
 
 ### State assembly
@@ -93,6 +94,28 @@ All entered data persists and is editable/reprintable later from the employee's 
 - **Template choice:** per-company default (`companies.default_template`), overridable per slip (`payslips.template_id`).
 - Draft slips render with a blank/placeholder serial until issued.
 
+## Per-template capabilities
+
+Templates are not all equal, so `templates/template-manifest.json` gains capability flags per template, surfaced in the UI (e.g. a template that can't show cumulative totals is labeled "single month"):
+
+- `supportsCumulative` — renders the cumulative "all months worked" block. **11 templates: true. `datev-highcopy`: false** (single-month only).
+- `supportsAutoTax` — embeds the Lohnsteuer/PAP + SV engine. **11 templates: true. `datev-highcopy`: false** (Lohnsteuer/SV are entered as amounts for that template).
+
+Verified in code: the 11 full templates carry all 5 engine functions; `datev-highcopy` carries only `computeRowBetrag` + `computeTotals` and has no cumulative block.
+
+## Cumulative totals ("all months worked")
+
+The cumulative block (Verdienstbescheinigung) shows the **true sum of the actual months** the employee has saved for the year up to and including the slip's month — not a single-month projection. Because each month is its own stored payslip, we have the real figures.
+
+Mechanism (no tax math added to the shell, minimal template impact):
+
+1. When a month's slip is rendered/issued, the **template computes** its totals; `SlipFrame` reads those computed cells back from the same-origin iframe and persists them to `payslips.computed_totals`.
+2. To render a slip's cumulative block, the shell **sums the `computed_totals`** of that employee's payslips for the same year, month ≤ current, and injects the sums into `state.verdienst.*`.
+3. The **primary `Verdienstbescheinigung` block needs no template change** — it already renders straight from `state.verdienst` (`datev-classic.html:3357`).
+4. The secondary auto-projected `Jahreswerte … seit Eintritt` block currently uses the month×months projection (`renderJahreswerte:3401`). For consistency it gets a **small backward-compatible tweak**: use provided cumulative values when present, else fall back to the existing projection. This is a surgical edit to the 11 full templates — not a rewrite. (`datev-highcopy` is exempt; it has no cumulative block.)
+
+This is the one place we touch template internals, and only minimally; the calculation engine itself is never modified.
+
 ## UI / visual direction
 
 Dark, minimal, professional, elegant: a restrained deep-neutral palette, a single accent color, generous whitespace, few elements per screen, strong typographic hierarchy. The white A4 slip preview sits inside the dark app chrome for clean contrast. Screens: Auth · Dashboard (employee list + search) · Employee detail (their months/slips) · Wizard · Company manager · Slip view/print. The `frontend-design` skill is used for the polish pass.
@@ -122,6 +145,7 @@ Old `index.html` is kept under a `reference/` path (or removed) once parity is r
 - **Unit:** `assembleState` mapping (DB rows → correct `state` shape, including injected serial).
 - **DB:** RLS — user A cannot read/write user B's companies/employees/payslips. Serial atomicity — concurrent `allocate_serial()` calls return distinct, strictly increasing values with no gaps.
 - **Contract/regression:** feed a known `state` to a template and assert the template's computed totals/taxes match expected values (guards the iframe contract and proves the engine is untouched). Reuse the figures from the original spec's acceptance criteria (e.g. Gesamt-Brutto `3.565,00`, Auszahlungsbetrag `2.707,06`).
+- **Cumulative totals:** given three saved months with differing figures, the cumulative block on the third slip equals the real sum of all three captured `computed_totals` (not a projection); a `supportsCumulative: false` template (`datev-highcopy`) shows no cumulative block.
 - **E2E (Playwright):** signup → add company → create employee via wizard → add a month → issue slip (serial appears) → reprint (same serial) → second slip gets the next global number.
 
 ## Build order (for the implementation plan)
@@ -130,10 +154,11 @@ Old `index.html` is kept under a `reference/` path (or removed) once parity is r
 2. Supabase schema + RLS + `profiles` trigger; auth screens (signup/login/reset).
 3. Companies CRUD + dashboard shell.
 4. Employees CRUD + the 3-step wizard (Personal, Company w/ inline add, Months).
-5. Payslips: month drafts + `assembleState` + preview/print via `SlipFrame`.
-6. Serial counter: `serial_counter` + seed + `allocate_serial()` RPC + issue/print flow (assign once, reuse on reprint).
-7. Dark UI polish pass (`frontend-design`).
-8. Tests: RLS, serial atomicity, template contract, E2E happy path.
+5. Payslips: month drafts + `assembleState` + preview/print via `SlipFrame`; capture `computed_totals` back from the rendered iframe.
+6. Cumulative totals: manifest capability flags; sum `computed_totals` across the year into `state.verdienst`; minimal `renderJahreswerte` tweak in the 11 full templates.
+7. Serial counter: `serial_counter` + seed + `allocate_serial()` RPC + issue/print flow (assign once, reuse on reprint).
+8. Dark UI polish pass (`frontend-design`).
+9. Tests: RLS, serial atomicity, template contract, cumulative-sum correctness, E2E happy path.
 
 ## Acceptance criteria
 
@@ -141,5 +166,6 @@ Old `index.html` is kept under a `reference/` path (or removed) once parity is r
 2. The user can add a company once and reuse it from the dropdown for later employees; another user never sees it.
 3. The wizard creates an employee (Personal → Company → Months) and saves all entered data, which is editable and reprintable later.
 4. Issuing a slip assigns the next global serial number; reprinting the same slip shows the identical number; the next issued slip (any user) gets the following number; concurrent issues never collide.
-5. Printed slips are visually identical to today's output and all automatic calculations (Lohnsteuer/PAP, Soli, SV, Midijob, totals, Auszahlungsbetrag) match the existing engine — because the templates are unchanged.
-6. The app is dark, minimal, and professional across all screens.
+5. Printed slips are visually identical to today's output and all automatic calculations (Lohnsteuer/PAP, Soli, SV, Midijob, totals, Auszahlungsbetrag) match the existing engine — because the calculation engine is unchanged.
+6. On a cumulative-capable template, a slip's "all months worked" block shows the true sum of the employee's saved months for the year (verified with months that differ); `datev-highcopy` correctly shows a single month with no cumulative block.
+7. The app is dark, minimal, and professional across all screens.
