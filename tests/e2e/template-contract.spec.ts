@@ -78,6 +78,46 @@ const CUMULATIVE_TEMPLATES = [
   "prism-classic.html", "quartz-classic.html",
 ];
 
+// Every template the manifest marks `supportsAutoTax` must actually run the
+// embedded Lohnsteuer/SV engine when automatik is on and steuer/sv are empty —
+// not just echo the brutto sum. (Previously only datev-classic was checked, so
+// lexware-classic silently shipped without wiring up applyAutomatik().)
+const AUTOTAX_TEMPLATES = CUMULATIVE_TEMPLATES;
+
+for (const file of AUTOTAX_TEMPLATES) {
+  test(`${file}: automatik self-computes Lohnsteuer + SV from brutto`, async ({ page }) => {
+    await postState(page, file, SAMPLE);
+    // Gesamt-Brutto = 100,00 * 20,00 = 2.000,00 flows into the Verdienst block.
+    await expect(page.locator("#vGesamtBrutto")).toHaveText("2.000,00");
+    // The engine must fill Lohnsteuer (StKl 1, ~2.000 brutto) and SV (KV).
+    await expect(page.locator("#vLohnsteuer")).not.toHaveText("");
+    await expect(page.locator("#vKvBeitrag")).not.toHaveText("");
+  });
+}
+
+// assembleState now hands templates a comma-joined company line (name + address,
+// no "*"). Every template must render it whole — templates that historically
+// showed only firma.split("*")[0] would otherwise drop the address.
+const COMPANY = "ALLPOWER GmbH, Rankestraße 2, 10789 Berlin";
+
+// All firmaLine templates (every cumulative one except datev-classic, which uses
+// #employerLine).
+const FIRMALINE_TEMPLATES = CUMULATIVE_TEMPLATES.filter(
+  (f) => f !== "datev-classic.html",
+);
+
+for (const file of FIRMALINE_TEMPLATES) {
+  test(`${file}: renders the full company name + address line`, async ({ page }) => {
+    await postState(page, file, { ...SAMPLE, firma: COMPANY });
+    await expect(page.locator("#firmaLine")).toHaveText(COMPANY);
+  });
+}
+
+test("datev-classic renders the full company name + address line", async ({ page }) => {
+  await postState(page, "datev-classic.html", { ...SAMPLE, firma: COMPANY });
+  await expect(page.locator("#employerLine")).toHaveText(COMPANY);
+});
+
 for (const file of CUMULATIVE_TEMPLATES) {
   test(`${file}: autoVerdienst + cumulative branch work`, async ({ page }) => {
     await postState(page, file, {

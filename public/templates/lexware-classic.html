@@ -2748,7 +2748,68 @@
         document.getElementById("gesamtBruttoCell").textContent = formatDE(totals.gesamtBrutto) + " EUR";
       }
 
+      function applyAutomatik() {
+        const a = state.automatik;
+        if (!a || !a.enabled) return null;
+        const steuerBrutto = sumSteuerBrutto(state.brutto || []);
+        const svBrutto = sumSVBrutto(state.brutto || []);
+        if (!steuerBrutto && !svBrutto) return null;
+
+        const kkZ = parseDE(a.kkZusatzbeitrag);
+        const kkRate = kkZ == null ? SV_RATES_2026.kkZusatzbeitragDurchschnitt : kkZ / 100;
+        const faktor = parseDE(a.faktor) || undefined;
+        const freib = parseDE(a.freibetragMonatlich) || 0;
+
+        const kinder = +a.kinder || 0;
+        const age = +a.age || 30;
+        const lst = calculateLohnsteuer({
+          brutto: steuerBrutto,
+          steuerklasse: a.steuerklasse,
+          faktor,
+          freibetragMonatlich: freib,
+          konfession: a.konfession,
+          bundesland: a.bundesland,
+          kkZusatzbeitrag: kkRate,
+          kinderlos: kinder === 0 && age >= 23,
+          pvKinderAbschlag: kinder >= 2 ? Math.min(kinder - 1, 4) : 0,
+          sachsen: a.bundesland === 'SN',
+        });
+        const sv = calculateSV({
+          brutto: svBrutto,
+          kinder: a.kinder,
+          age: a.age,
+          bundesland: a.bundesland,
+          midijob: a.midijob,
+          kkZusatzbeitrag: kkRate,
+          westOst: a.westOst,
+        });
+
+        if (!state.steuer[0]) state.steuer[0] = { tag: "L" };
+        Object.assign(state.steuer[0], {
+          tag: "L",
+          steuerBrutto: formatDE(lst.steuerBrutto),
+          lohnsteuer: formatDE(lst.lohnsteuer),
+          kirchensteuer:
+            lst.kirchensteuer > 0 ? formatDE(lst.kirchensteuer) : "",
+          soli: lst.soli > 0 ? formatDE(lst.soli) : "",
+        });
+        if (!state.sv[0]) state.sv[0] = { tag: "L" };
+        Object.assign(state.sv[0], {
+          tag: "L",
+          kvBrutto: formatDE(sv.kvBrutto),
+          rvBrutto: formatDE(sv.rvBrutto),
+          avBrutto: formatDE(sv.avBrutto),
+          pvBrutto: formatDE(sv.pvBrutto),
+          kvBeitrag: formatDE(sv.kvBeitrag),
+          rvBeitrag: formatDE(sv.rvBeitrag),
+          avBeitrag: formatDE(sv.avBeitrag),
+          pvBeitrag: formatDE(sv.pvBeitrag),
+        });
+        return { lst, sv };
+      }
+
       function renderSteuerUndSV() {
+        applyAutomatik();
         const sbody = document.getElementById("steuerBody");
         sbody.innerHTML = "";
         for (const r of state.steuer) {

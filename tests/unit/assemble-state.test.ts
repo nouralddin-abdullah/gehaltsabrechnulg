@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assembleState } from "@/lib/assembleState";
+import { assembleState, composeFirma } from "@/lib/assembleState";
 import type { Company, Employee, Payslip } from "@/lib/db/types";
 
 const company: Company = {
@@ -39,7 +39,7 @@ const payslip: Payslip = {
 describe("assembleState", () => {
   it("maps person, company codes, period and brutto rows", () => {
     const s = assembleState(company, employee, payslip);
-    expect(s.firma).toBe("ACME GmbH*Str 1*10115 Berlin");
+    expect(s.firma).toBe("ACME GmbH, Str 1, 10115 Berlin");
     expect(s.mitarbeiter.name).toBe("Max Mustermann");
     expect(s.zeitraum).toEqual({ monat: "März", jahr: "2026" });
     expect(s.brutto).toHaveLength(1);
@@ -94,6 +94,11 @@ describe("assembleState", () => {
     expect(s.automatik.konfession).toBe("rk"); // wired to church-tax calc
   });
 
+  it("falls back to the display name when the employer line is empty", () => {
+    const c: Company = { ...company, name: "ACME GmbH", firma: "" };
+    expect(composeFirma(c)).toBe("ACME GmbH"); // name shows, address skipped
+  });
+
   it("maps employee bank (name/IBAN) and the month's employer-cost fields", () => {
     const emp: Employee = {
       ...employee,
@@ -112,5 +117,41 @@ describe("assembleState", () => {
     expect(s.bank.svAgAnteil).toBe("100,00");
     expect(s.bank.gesamtkosten).toBe("105,00");
     expect(s.bank.code).toBe("80050"); // serial still owns the code box
+  });
+});
+
+describe("composeFirma", () => {
+  const c = (name: string, firma: string): Company => ({
+    id: "c", owner_id: "u", name, firma, mandant: "", mandant_box: "",
+    roc_code: "", default_template: "datev-classic", created_at: "",
+  });
+
+  it("shows the display name and the employer-line address together", () => {
+    // User puts the name in Display name and the address in Employer line.
+    expect(composeFirma(c("ACME GmbH", "Rankestr. 2*10789 Berlin"))).toBe(
+      "ACME GmbH, Rankestr. 2, 10789 Berlin",
+    );
+  });
+
+  it("does not duplicate the name when the employer line already leads with it", () => {
+    expect(composeFirma(c("ACME", "ACME GmbH*Rankestr. 2*10789 Berlin"))).toBe(
+      "ACME GmbH, Rankestr. 2, 10789 Berlin",
+    );
+  });
+
+  it("shows the name alone when there is no employer line", () => {
+    expect(composeFirma(c("ACME GmbH", ""))).toBe("ACME GmbH");
+  });
+
+  it("shows the employer line alone when there is no display name", () => {
+    expect(composeFirma(c("", "ACME GmbH*Rankestr. 2*10789 Berlin"))).toBe(
+      "ACME GmbH, Rankestr. 2, 10789 Berlin",
+    );
+  });
+
+  it("drops empty segments and returns empty when nothing is set", () => {
+    expect(composeFirma(c("", "**"))).toBe("");
+    expect(composeFirma(c("", ""))).toBe("");
+    expect(composeFirma(null)).toBe("");
   });
 });

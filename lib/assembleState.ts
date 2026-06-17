@@ -31,6 +31,26 @@ const EMPTY_BANK: BankBlock = {
   name: "", iban: "", svAgAnteil: "", zusAgKosten: "", gesamtkosten: "", code: "",
 };
 
+// The company line printed on the slip = display name + employer-line address.
+// Users may fill either, both, or put the full name inside the employer line.
+// Rules: show whatever is present, skip what's missing, and don't duplicate the
+// name when the employer line already starts with it. The result is comma-joined
+// (templates split firma on "*"; with none present they render the whole string).
+export function composeFirma(company: Company | null): string {
+  if (!company) return "";
+  const name = (company.name ?? "").trim();
+  const segs = (company.firma ?? "")
+    .split("*")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const first = (segs[0] ?? "").toLowerCase();
+  const lname = name.toLowerCase();
+  const firmaLeadsWithName =
+    !!first && !!lname && (first.startsWith(lname) || lname.startsWith(first));
+  if (name && !firmaLeadsWithName) segs.unshift(name);
+  return segs.join(", ");
+}
+
 export function assembleState(
   company: Company | null,
   employee: Employee,
@@ -68,7 +88,7 @@ export function assembleState(
 
   const state: SlipState = {
     meta,
-    firma: company?.firma ?? "",
+    firma: composeFirma(company),
     mitarbeiter: employee.data.mitarbeiter,
     zeitraum: d.zeitraum,
     brutto: d.brutto ?? [],
