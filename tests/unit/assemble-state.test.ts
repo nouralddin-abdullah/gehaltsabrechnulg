@@ -11,7 +11,7 @@ const company: Company = {
 
 const employee: Employee = {
   id: "e1", owner_id: "u1", company_id: "c1", name: "Max Mustermann",
-  created_at: "",
+  unlocked_at: null, created_at: "",
   data: {
     mitarbeiter: { name: "Max Mustermann", strasse: "Weg 2", plzOrt: "10115 Berlin" },
     meta: { persNr: "778899", steuerId: "12345678901", abtNr: "7" },
@@ -26,7 +26,7 @@ const employee: Employee = {
 const payslip: Payslip = {
   id: "p1", owner_id: "u1", employee_id: "e1", year: 2026, month: 3,
   status: "draft", serial_number: null, issued_at: null,
-  template_id: "datev-classic", computed_totals: null,
+  template_id: "datev-classic", computed_totals: null, printed_at: null,
   created_at: "", updated_at: "",
   data: {
     zeitraum: { monat: "März", jahr: "2026" },

@@ -42,6 +42,9 @@ export type Employee = {
   company_id: string | null;
   name: string;
   data: EmployeeData;
+  // Set when the employee's first payslip is paid-printed (a credit was spent).
+  // Once set, all of this employee's payslips print for free.
+  unlocked_at: string | null;
   created_at: string;
 };
 
@@ -77,6 +80,19 @@ export type Payslip = {
   template_id: string;
   data: PayslipData;
   computed_totals: ComputedTotals | null;
+  // Set the first time this slip is printed (a credit may have been spent).
+  printed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+// One row of the credit wallet ledger (purchases and print spends).
+export type CreditTransaction = {
+  id: string;
+  user_id: string;
+  delta: number; // + purchase, - spend
+  reason: string; // 'purchase:<pack>' | 'print'
+  employee_id: string | null;
+  payslip_id: string | null;
+  created_at: string;
 };

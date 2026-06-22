@@ -4,6 +4,7 @@ import { getEmployee } from "@/lib/db/employees";
 import { listPayslipsForEmployee } from "@/lib/db/payslips";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Breadcrumbs } from "@/components/app-shell/Breadcrumbs";
+import { identityLockState } from "@/lib/credits";
 
 export default async function EmployeeDetailPage({
   params,
@@ -14,6 +15,12 @@ export default async function EmployeeDetailPage({
   const employee = await getEmployee(id);
   if (!employee) notFound();
   const payslips = await listPayslipsForEmployee(id);
+  const lock = identityLockState(employee.unlocked_at);
+  const headerDescription = lock.locked
+    ? "Unlocked · identity locked — payslips print free."
+    : lock.unlocked
+      ? "Unlocked — payslips print free (identity editable for 1h)."
+      : undefined;
 
   return (
     <>
@@ -23,7 +30,10 @@ export default async function EmployeeDetailPage({
           { label: employee.name || "(unnamed)" },
         ]}
       />
-      <PageHeader title={employee.name || "(unnamed)"}>
+      <PageHeader
+        title={employee.name || "(unnamed)"}
+        description={headerDescription}
+      >
         <Link
           href={`/employees/${id}/edit`}
           className="text-sm text-zinc-400 hover:text-zinc-200"
@@ -48,8 +58,13 @@ export default async function EmployeeDetailPage({
               {p.data.zeitraum.monat} {p.data.zeitraum.jahr}
             </Link>
             <div className="flex items-center gap-4">
-              <span className="text-xs text-zinc-500">
-                {p.status === "issued" ? `#${p.serial_number}` : "draft"}
+              <span
+                className={
+                  "text-xs " +
+                  (p.printed_at ? "text-emerald-400" : "text-zinc-500")
+                }
+              >
+                {p.printed_at ? `printed · #${p.serial_number}` : "draft"}
               </span>
               <Link
                 href={`/employees/${id}/payslips/${p.id}/edit`}

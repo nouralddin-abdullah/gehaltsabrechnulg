@@ -60,6 +60,14 @@ export const EMPLOYEE_FIELD_GROUPS: EmployeeFieldGroup[] = [
   },
 ];
 
+// Identity fields that freeze 1 hour after an employee is unlocked (printed).
+// Kept in sync with the DB trigger in migration 0007 (the DB is authoritative).
+export const IDENTITY_PATHS = new Set([
+  "mitarbeiter.name",
+  "meta.geburtsdatum",
+  "meta.persNr",
+]);
+
 // flat list of every field path the form renders
 export const EMPLOYEE_FIELD_PATHS = EMPLOYEE_FIELD_GROUPS.flatMap((g) =>
   g.fields.map((f) => f.path),

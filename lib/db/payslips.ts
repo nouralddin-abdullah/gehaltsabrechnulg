@@ -94,29 +94,8 @@ export async function savePayslipComputedTotals(
   if (error) throw error;
 }
 
-// Assign-once / reuse-forever: if already issued, return the stored serial.
-export async function issuePayslip(id: string): Promise<number> {
-  const supabase = await createClient();
-  const existing = await getPayslip(id);
-  if (!existing) throw new Error("payslip not found");
-  if (existing.status === "issued" && existing.serial_number != null) {
-    return existing.serial_number;
-  }
-  const { data: serial, error: rpcError } =
-    await supabase.rpc("allocate_serial");
-  if (rpcError) throw rpcError;
-  const { error } = await supabase
-    .from("payslips")
-    .update({
-      serial_number: serial as number,
-      status: "issued",
-      issued_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-  if (error) throw error;
-  return serial as number;
-}
+// Serial allocation + issuing now happens atomically inside the credit-charging
+// print_payslip RPC — see lib/db/credits.ts (printPayslip).
 
 // computed_totals of the employee's saved months for `year`, month <= maxMonth,
 // excluding `excludeId` (the slip currently being previewed contributes live).

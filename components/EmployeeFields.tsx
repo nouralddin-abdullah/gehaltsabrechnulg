@@ -1,6 +1,6 @@
 "use client";
 
-import { EMPLOYEE_FIELD_GROUPS } from "@/lib/employee-fields";
+import { EMPLOYEE_FIELD_GROUPS, IDENTITY_PATHS } from "@/lib/employee-fields";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { toDateInput } from "@/lib/date-format";
@@ -14,7 +14,14 @@ function getPath(obj: unknown, path: string): string {
   return typeof v === "boolean" ? (v ? "on" : "") : String(v);
 }
 
-export function EmployeeFields({ data }: { data?: EmployeeData }) {
+export function EmployeeFields({
+  data,
+  // When true, identity fields (name, birthdate, personnel number) are frozen.
+  lockIdentity = false,
+}: {
+  data?: EmployeeData;
+  lockIdentity?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-8">
       {EMPLOYEE_FIELD_GROUPS.map((group) => (
@@ -23,6 +30,7 @@ export function EmployeeFields({ data }: { data?: EmployeeData }) {
           <div className="grid grid-cols-2 gap-4">
             {group.fields.map((f) => {
               const value = data ? getPath(data, f.path) : "";
+              const locked = lockIdentity && IDENTITY_PATHS.has(f.path);
               if (f.type === "checkbox") {
                 return (
                   <label key={f.path} className="flex items-center gap-2 text-sm text-zinc-300">
@@ -32,11 +40,22 @@ export function EmployeeFields({ data }: { data?: EmployeeData }) {
                 );
               }
               return (
-                <Field key={f.path} label={f.label} hint={f.description} example={f.example}>
+                <Field
+                  key={f.path}
+                  label={locked ? `${f.label} 🔒` : f.label}
+                  hint={
+                    locked
+                      ? "Locked — this employee has already been printed."
+                      : f.description
+                  }
+                  example={locked ? undefined : f.example}
+                >
                   <Input
                     name={f.path}
                     type={f.date ? "date" : "text"}
                     defaultValue={f.date ? toDateInput(value, f.date) : value}
+                    disabled={locked}
+                    className={locked ? "cursor-not-allowed opacity-60" : ""}
                   />
                 </Field>
               );

@@ -5,11 +5,11 @@ import { redirect } from "next/navigation";
 import { buildPayslipData } from "@/lib/payslip-data";
 import {
   createPayslip,
-  issuePayslip as issuePayslipDb,
   savePayslipComputedTotals,
   setPayslipTemplate,
   updatePayslipData,
 } from "@/lib/db/payslips";
+import { printPayslip as printPayslipDb, type PrintResult } from "@/lib/db/credits";
 import type { ComputedTotals } from "@/lib/db/types";
 
 export async function createMonth(
@@ -34,13 +34,19 @@ export async function saveComputedTotals(
   await savePayslipComputedTotals(payslipId, totals);
 }
 
-export async function issuePayslip(
+// Print = spend a credit (first print of the employee) + assign/reuse the serial.
+// All accounting is enforced atomically in the DB (print_payslip RPC).
+export async function printPayslip(
   employeeId: string,
   payslipId: string,
-): Promise<void> {
-  await issuePayslipDb(payslipId);
-  revalidatePath(`/employees/${employeeId}/payslips/${payslipId}`);
-  revalidatePath(`/employees/${employeeId}`);
+): Promise<PrintResult> {
+  const res = await printPayslipDb(payslipId);
+  if (res.ok) {
+    revalidatePath(`/employees/${employeeId}/payslips/${payslipId}`);
+    revalidatePath(`/employees/${employeeId}`);
+    revalidatePath("/", "layout");
+  }
+  return res;
 }
 
 export async function changeTemplate(

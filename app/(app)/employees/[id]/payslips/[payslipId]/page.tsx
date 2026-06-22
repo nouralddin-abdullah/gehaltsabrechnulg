@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getEmployee } from "@/lib/db/employees";
 import { listCompanies } from "@/lib/db/companies";
 import { getPayslip, getYearComputedTotals } from "@/lib/db/payslips";
+import { getCreditBalance } from "@/lib/db/credits";
 import Link from "next/link";
 import { SlipPreview } from "@/components/SlipPreview";
 import { TEMPLATES } from "@/lib/template-manifest";
@@ -14,10 +15,11 @@ export default async function PayslipPreviewPage({
   params: Promise<{ id: string; payslipId: string }>;
 }) {
   const { id, payslipId } = await params;
-  const [employee, payslip, companies] = await Promise.all([
+  const [employee, payslip, companies, balance] = await Promise.all([
     getEmployee(id),
     getPayslip(payslipId),
     listCompanies(),
+    getCreditBalance(),
   ]);
   if (!employee || !payslip) notFound();
   const company = companies.find((c) => c.id === employee.company_id) ?? null;
@@ -52,6 +54,7 @@ export default async function PayslipPreviewPage({
         payslip={payslip}
         templates={TEMPLATES}
         otherMonths={otherMonths}
+        balance={balance}
       />
     </>
   );
