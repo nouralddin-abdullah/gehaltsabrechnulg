@@ -39,8 +39,8 @@ export default async function CreditsPage() {
       <h2 className="mb-3 text-sm font-medium text-zinc-300">Buy credits</h2>
       <CreditPacks />
       <p className="mt-3 text-xs text-zinc-500">
-        Payment isn&rsquo;t connected yet — buying adds credits to your account
-        instantly for now.
+        Secure checkout is handled by Whop. Credits are added to your balance as
+        soon as your payment is confirmed.
       </p>
 
       <h2 className="mb-3 mt-10 text-sm font-medium text-zinc-300">

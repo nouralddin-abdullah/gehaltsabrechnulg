@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.includes(path);
+  // Whop posts to the webhook with no user session — never redirect it to /login.
+  const isPublic = PUBLIC_PATHS.includes(path) || path.startsWith("/api/whop/");
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CREDIT_PACKS, formatEuro, pricePerCredit } from "@/lib/credits";
-import { purchaseCreditPack } from "@/app/(app)/credits/actions";
+import { startCreditCheckout } from "@/app/(app)/credits/actions";
 
 export function CreditPacks() {
   const router = useRouter();
@@ -15,7 +15,13 @@ export function CreditPacks() {
   const buy = (id: string) => {
     setBusyId(id);
     startTransition(async () => {
-      await purchaseCreditPack(id);
+      const result = await startCreditCheckout(id);
+      if (result.url) {
+        // Hand off to Whop's hosted checkout; we return after payment.
+        window.location.href = result.url;
+        return;
+      }
+      // Dev fallback (no Whop env): credits were granted instantly.
       setBusyId(null);
       router.refresh();
     });
@@ -56,7 +62,7 @@ export function CreditPacks() {
             disabled={pending}
             className="mt-auto"
           >
-            {busyId === pack.id ? "Adding…" : "Buy"}
+            {busyId === pack.id ? "Opening…" : "Buy"}
           </Button>
         </Card>
       ))}
