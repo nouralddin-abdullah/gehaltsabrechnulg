@@ -52,12 +52,3 @@ export async function createPackCheckout({
 
   return checkout.purchase_url;
 }
-
-// Verifies the webhook signature against WHOP_WEBHOOK_SECRET and returns the
-// typed event. Throws if the signature is invalid.
-export function unwrapWebhook(rawBody: string, headers: Record<string, string>) {
-  return getClient().webhooks.unwrap(rawBody, {
-    headers,
-    key: process.env.WHOP_WEBHOOK_SECRET,
-  });
-}

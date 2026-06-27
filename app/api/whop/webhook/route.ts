@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { unwrapWebhook } from "@/lib/whop";
+import {
+  verifyAndParseWhopWebhook,
+  WhopSignatureError,
+} from "@/lib/whop-webhook";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Whop calls this on payment events. We verify the signature, and on
-// payment.succeeded credit the order's user (service role → fulfill_credit_order,
-// idempotent). Runs on the Node runtime so the Whop SDK + crypto are available.
+// Whop calls this on payment events. We verify the signature, and on a
+// successful payment credit the order's user (service role → fulfill_credit_order,
+// idempotent). Runs on the Node runtime so node:crypto is available.
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
@@ -16,21 +19,26 @@ export async function POST(req: NextRequest) {
 
   let event;
   try {
-    event = unwrapWebhook(raw, headers);
+    event = verifyAndParseWhopWebhook(raw, headers, process.env.WHOP_WEBHOOK_SECRET);
   } catch (err) {
-    console.error("[whop webhook] signature verification failed", err);
+    const detail = err instanceof WhopSignatureError ? err.message : "error";
+    console.error("[whop webhook] signature verification failed:", detail, {
+      headerKeys: Object.keys(headers),
+    });
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  if (event.type !== "payment.succeeded") {
-    // Acknowledge everything else so Whop doesn't retry events we ignore.
-    return NextResponse.json({ ok: true, ignored: event.type });
+  // Standard Webhooks uses `type`; the legacy scheme uses `action`.
+  const kind = event.type ?? event.action;
+  if (kind !== "payment.succeeded") {
+    return NextResponse.json({ ok: true, ignored: kind ?? "unknown" });
   }
 
-  const payment = event.data as { id: string; metadata?: Record<string, unknown> };
+  const payment = event.data ?? {};
   const orderId = payment.metadata?.order_id as string | undefined;
+  const paymentId = (payment.id as string | undefined) ?? `whop_${Date.now()}`;
   if (!orderId) {
-    console.warn("[whop webhook] payment.succeeded without order_id metadata", payment.id);
+    console.warn("[whop webhook] payment.succeeded without order_id metadata", paymentId);
     return NextResponse.json({ ok: true, skipped: "no order_id" });
   }
 
@@ -38,7 +46,7 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient();
     const { data, error } = await admin.rpc("fulfill_credit_order", {
       p_order_id: orderId,
-      p_whop_payment_id: payment.id,
+      p_whop_payment_id: paymentId,
     });
     if (error) throw error;
     console.log("[whop webhook] fulfilled", orderId, data);
